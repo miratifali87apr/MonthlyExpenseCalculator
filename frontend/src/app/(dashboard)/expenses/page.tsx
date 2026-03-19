@@ -15,7 +15,7 @@ import {
   STATUS_COLORS,
   CATEGORIES,
 } from '@/lib/utils';
-import { ExpenseItem } from '@/types';
+import { ExpenseItem, Category } from '@/types';
 import dayjs from 'dayjs';
 import { ChevronUp, ChevronDown, ChevronsUpDown, Plus, X } from 'lucide-react';
 import { propertiesApi } from '@/lib/api';
@@ -39,7 +39,7 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
     setSaving(true); setError('');
     try {
       await expensesApi.create({
-        name: form.name.trim(), category: form.category,
+        name: form.name.trim(), category: form.category as Category,
         amount: parseFloat(form.amount),
         due_date: new Date(form.due_date).toISOString(),
         status: form.status,
