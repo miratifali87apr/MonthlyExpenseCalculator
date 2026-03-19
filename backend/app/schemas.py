@@ -191,6 +191,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str

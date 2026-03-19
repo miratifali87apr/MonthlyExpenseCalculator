@@ -23,7 +23,8 @@
     "dayjs": "^1.11.10",
     "@prisma/client": "^5.8.1",
     "clsx": "^2.1.0",
-    "lucide-react": "^0.309.0"
+    "lucide-react": "^0.309.0",
+    "@supabase/supabase-js": "^2.39.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

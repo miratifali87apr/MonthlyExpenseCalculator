@@ -8,18 +8,21 @@ import type {
   RecurringTemplate,
 } from '@/types';
 
+import { supabase } from './supabase';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-function getToken(): string | null {
+async function getToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('finance_token');
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
 }
 
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
+  const token = await getToken();
   const res = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers: {
@@ -32,7 +35,7 @@ async function request<T>(
   if (!res.ok) {
     if (res.status === 401) {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('finance_token');
+        await supabase.auth.signOut();
         window.location.href = '/login';
       }
     }
@@ -46,11 +49,6 @@ async function request<T>(
 
 // Auth
 export const authApi = {
-  login: (email: string, password: string) =>
-    request<{ access_token: string; token_type: string }>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }),
   me: () => request<User>('/api/auth/me'),
 };
 

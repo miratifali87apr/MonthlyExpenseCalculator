@@ -1,3 +1,5 @@
+import os
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -32,6 +34,20 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
+def _find_or_create_user(email: str, name: str, db: Session) -> models.User:
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        user = models.User(
+            email=email,
+            name=name or email.split("@")[0],
+            password=get_password_hash(secrets.token_hex(32)),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
@@ -41,15 +57,34 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # 1. Try Supabase JWT first
+    supabase_secret = os.environ.get("SUPABASE_JWT_SECRET")
+    if supabase_secret:
+        try:
+            payload = jwt.decode(
+                token,
+                supabase_secret,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+            email: str = payload.get("email")
+            if email:
+                meta = payload.get("user_metadata") or {}
+                name = meta.get("full_name") or meta.get("name") or email.split("@")[0]
+                return _find_or_create_user(email, name, db)
+        except JWTError:
+            pass
+
+    # 2. Fall back to our own JWT (email/password via seeded users)
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
+        email = payload.get("sub")
+        if email:
+            user = db.query(models.User).filter(models.User.email == email).first()
+            if user:
+                return user
     except JWTError:
-        raise credentials_exception
+        pass
 
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if user is None:
-        raise credentials_exception
-    return user
+    raise credentials_exception
