@@ -18,6 +18,8 @@ export interface Property {
   tenant_liable_for_water: boolean;
   weekly_rent?: number;
   pm_fee_pct?: number;
+  purchase_price?: number;
+  loan_amount?: number;
   created_at: string;
   updated_at: string;
 }
