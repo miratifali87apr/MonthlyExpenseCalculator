@@ -14,7 +14,7 @@ import {
   FREQUENCY_LABELS,
   CATEGORIES,
 } from '@/lib/utils';
-import { RecurringTemplate, Property } from '@/types';
+import { RecurringTemplate, Property, Category, Frequency } from '@/types';
 import { Plus, X } from 'lucide-react';
 
 function toMonthlyAmount(template: RecurringTemplate): number {
@@ -45,9 +45,9 @@ function AddRecurringModal({ onClose, onSaved, properties }: { onClose: () => vo
     try {
       await recurringApi.create({
         name: form.name.trim(),
-        category: form.category,
+        category: form.category as Category,
         amount: parseFloat(form.amount),
-        frequency: form.frequency,
+        frequency: form.frequency as Frequency,
         day_of_month: form.day_of_month ? parseInt(form.day_of_month) : undefined,
         property_id: form.property_id ? parseInt(form.property_id) : undefined,
         notes: form.notes.trim() || undefined,

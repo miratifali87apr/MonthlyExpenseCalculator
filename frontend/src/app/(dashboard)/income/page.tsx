@@ -13,7 +13,7 @@ import {
   INCOME_TYPE_LABELS,
   FREQUENCY_LABELS,
 } from '@/lib/utils';
-import { IncomeItem, Property } from '@/types';
+import { IncomeItem, Property, IncomeType, Frequency } from '@/types';
 import { Plus, X } from 'lucide-react';
 
 function toMonthlyAmount(item: IncomeItem): number {
@@ -49,9 +49,9 @@ function AddIncomeModal({ onClose, onSaved, properties }: { onClose: () => void;
     try {
       await incomeApi.create({
         name: form.name.trim(),
-        type: form.type,
+        type: form.type as IncomeType,
         amount: parseFloat(form.amount),
-        frequency: form.is_recurring ? form.frequency : undefined,
+        frequency: form.is_recurring ? form.frequency as Frequency : undefined,
         is_recurring: form.is_recurring,
         property_id: form.property_id ? parseInt(form.property_id) : undefined,
         notes: form.notes.trim() || undefined,
