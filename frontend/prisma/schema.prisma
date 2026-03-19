@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Property {
+  id                   Int      @id @default(autoincrement())
+  name                 String
+  address              String?
+  tenantLiableForWater Boolean  @default(false) @map("tenant_liable_for_water")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  expenses  ExpenseItem[]
+  income    IncomeItem[]
+  templates RecurringTemplate[]
+
+  @@map("properties")
+}
+
+model RecurringTemplate {
+  id         Int      @id @default(autoincrement())
+  name       String
+  category   String
+  amount     Decimal  @db.Decimal(10, 2)
+  frequency  String   @default("monthly")
+  dayOfMonth Int?     @map("day_of_month")
+  propertyId Int?     @map("property_id")
+  notes      String?
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  property Property?     @relation(fields: [propertyId], references: [id])
+  expenses ExpenseItem[]
+
+  @@map("recurring_templates")
+}
+
+model ExpenseItem {
+  id          Int       @id @default(autoincrement())
+  name        String
+  category    String
+  amount      Decimal   @db.Decimal(10, 2)
+  dueDate     DateTime  @map("due_date")
+  paidDate    DateTime? @map("paid_date")
+  status      String    @default("pending")
+  notes       String?
+  propertyId  Int?      @map("property_id")
+  templateId  Int?      @map("template_id")
+  isRecurring Boolean   @default(false) @map("is_recurring")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  property Property?          @relation(fields: [propertyId], references: [id])
+  template RecurringTemplate? @relation(fields: [templateId], references: [id])
+
+  @@map("expense_items")
+}
+
+model IncomeItem {
+  id                  Int       @id @default(autoincrement())
+  name                String
+  type                String
+  amount              Decimal   @db.Decimal(10, 2)
+  receivedDate        DateTime? @map("received_date")
+  expectedDate        DateTime? @map("expected_date")
+  propertyId          Int?      @map("property_id")
+  reimbursementStatus String?   @map("reimbursement_status")
+  notes               String?
+  isRecurring         Boolean   @default(false) @map("is_recurring")
+  frequency           String?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  property Property? @relation(fields: [propertyId], references: [id])
+
+  @@map("income_items")
+}
