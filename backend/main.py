@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
 from app import models
 from app.routers import auth, dashboard, expenses, income, properties, recurring, ai
+from app.config import settings
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -14,7 +15,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://frontend:3000"],
+    allow_origins=["http://localhost:3000", "http://frontend:3000", settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
