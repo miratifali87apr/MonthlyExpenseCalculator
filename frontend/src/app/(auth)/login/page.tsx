@@ -67,17 +67,25 @@ export default function LoginPage() {
 
     try {
       if (tab === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.replace('/dashboard');
+        if (data.session) {
+          router.replace('/dashboard');
+        } else {
+          setError('Sign in succeeded but no session was created. Please try again.');
+        }
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: name } },
         });
         if (error) throw error;
-        setMessage('Account created! Check your email to confirm, or sign in if confirmation is disabled.');
+        if (data.session) {
+          router.replace('/dashboard');
+        } else {
+          setMessage('Account created! Please check your email to confirm before signing in.');
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
