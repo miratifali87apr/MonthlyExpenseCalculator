@@ -46,7 +46,7 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
   }
 
   return (
-    <aside className="hidden md:flex w-64 bg-slate-900 flex-col min-h-screen shrink-0">
+    <aside className="hidden md:flex w-64 bg-slate-900 flex-col h-screen sticky top-0 shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
         <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center shrink-0">
@@ -58,7 +58,7 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);

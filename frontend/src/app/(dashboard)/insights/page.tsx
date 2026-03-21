@@ -352,7 +352,7 @@ function calcLandTax(landValue: number, structure: OwnershipStructure, state: Au
         return 37500 + (landValue - 3000000) * 0.0225;
       }
       if (landValue <= 2999999) return 1450 + (landValue - 350000) * 0.017;
-      return 45150 + (landValue - 3000000) * 0.025;
+      return 46500 + (landValue - 3000000) * 0.025; // $1,450 + $2,650,000×1.7% = $46,500
     }
     case 'VIC': {
       // SRO Victoria 2024-25: Individual/SMSF threshold $300k; Trust $25k + 0.5% surcharge
