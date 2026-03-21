@@ -334,17 +334,97 @@ function calcStampDuty(price: number, state: AusState): number {
   }
 }
 
-// QLD land tax (annual, on unimproved land value estimated at 30% of purchase price)
-function calcLandTaxQLD(landValue: number, structure: OwnershipStructure): number {
-  const threshold = structure === 'individual' ? 600000 : 350000;
-  if (landValue <= threshold) return 0;
-  if (structure === 'individual') {
-    if (landValue <= 999999) return 500 + (landValue - 600000) * 0.01;
-    if (landValue <= 2999999) return 4500 + (landValue - 1000000) * 0.0165;
-    return 37500 + (landValue - 3000000) * 0.0225;
+// Land tax calculators — annual, on unimproved land value (est. 30% of purchase price)
+// ACT uses a rates system (no separate land tax). NT has no land tax.
+
+function calcLandTax(landValue: number, structure: OwnershipStructure, state: AusState): number {
+  const isTrust = structure === 'trust' || structure === 'company';
+
+  switch (state) {
+    case 'QLD': {
+      const threshold = isTrust ? 350000 : 600000;
+      if (landValue <= threshold) return 0;
+      if (!isTrust) {
+        if (landValue <= 999999) return 500 + (landValue - 600000) * 0.01;
+        if (landValue <= 2999999) return 4500 + (landValue - 1000000) * 0.0165;
+        return 37500 + (landValue - 3000000) * 0.0225;
+      }
+      if (landValue <= 2999999) return 1450 + (landValue - 350000) * 0.017;
+      return 45150 + (landValue - 3000000) * 0.025;
+    }
+    case 'VIC': {
+      // Individual/SMSF threshold $300k; Trust $25k with +0.5% surcharge
+      const threshold = isTrust ? 25000 : 300000;
+      if (landValue <= threshold) return 0;
+      // Standard rate table (brackets always anchored at $300k)
+      let tax = 0;
+      if (landValue <= 300000) {
+        tax = (landValue - threshold) * 0.002; // below $300k, trust only
+      } else if (landValue <= 600000) {
+        tax = 375 + (landValue - 300000) * 0.002;
+      } else if (landValue <= 1000000) {
+        tax = 975 + (landValue - 600000) * 0.005;
+      } else if (landValue <= 1800000) {
+        tax = 2975 + (landValue - 1000000) * 0.008;
+      } else if (landValue <= 3000000) {
+        tax = 9375 + (landValue - 1800000) * 0.013;
+      } else {
+        tax = 24975 + (landValue - 3000000) * 0.0255;
+      }
+      // Trust surcharge: +0.5% on taxable value above $25k
+      if (isTrust) tax += (landValue - 25000) * 0.005;
+      return tax;
+    }
+    case 'NSW': {
+      // Threshold $1,075,000 (2024-25, adjusted annually by CPI)
+      // Same threshold for individuals, companies, trusts
+      const threshold = 1075000;
+      if (landValue <= threshold) return 0;
+      if (landValue <= 6571000) return 100 + (landValue - threshold) * 0.016;
+      return 100504 + (landValue - 6571000) * 0.02;
+    }
+    case 'WA': {
+      // Threshold $300,000
+      if (landValue <= 300000) return 0;
+      if (landValue <= 420000) return (landValue - 300000) * 0.0015;
+      if (landValue <= 1000000) return 180 + (landValue - 420000) * 0.0045;
+      if (landValue <= 1800000) return 2790 + (landValue - 1000000) * 0.0076;
+      if (landValue <= 5000000) return 8870 + (landValue - 1800000) * 0.0105;
+      return 42470 + (landValue - 5000000) * 0.014;
+    }
+    case 'SA': {
+      // Threshold $534,000 (2024-25)
+      if (landValue <= 534000) return 0;
+      if (landValue <= 1082000) return (landValue - 534000) * 0.005;
+      if (landValue <= 1700000) return 2740 + (landValue - 1082000) * 0.01;
+      if (landValue <= 3900000) return 8940 + (landValue - 1700000) * 0.0175;
+      return 47440 + (landValue - 3900000) * 0.024;
+    }
+    case 'TAS': {
+      // Threshold $100,000
+      if (landValue <= 100000) return 0;
+      if (landValue <= 499999) return (landValue - 100000) * 0.0045;
+      return 1800 + (landValue - 500000) * 0.015;
+    }
+    case 'ACT': return 0; // ACT uses general rates (land value charge), no separate land tax
+    case 'NT': return 0;  // NT has no land tax
+    default: return 0;
   }
-  if (landValue <= 2999999) return 1450 + (landValue - 350000) * 0.017;
-  return 45150 + (landValue - 3000000) * 0.025;
+}
+
+function landTaxThresholdLabel(structure: OwnershipStructure, state: AusState): string {
+  const isTrust = structure === 'trust' || structure === 'company';
+  switch (state) {
+    case 'QLD': return isTrust ? '$350k' : '$600k';
+    case 'VIC': return isTrust ? '$25k (trust surcharge applies)' : '$300k';
+    case 'NSW': return '$1,075,000';
+    case 'WA': return '$300k';
+    case 'SA': return '$534k';
+    case 'TAS': return '$100k';
+    case 'ACT': return 'N/A (general rates system)';
+    case 'NT': return 'N/A (no land tax)';
+    default: return '—';
+  }
 }
 
 function PredictorTab() {
@@ -396,7 +476,7 @@ function PredictorTab() {
 
   // Ongoing costs & tax calcs
   const estimatedLandValue = purchasePrice * 0.3;
-  const annualLandTax = state === 'QLD' ? calcLandTaxQLD(estimatedLandValue, structure) : 0;
+  const annualLandTax = calcLandTax(estimatedLandValue, structure, state);
   const annualInterest = loanAmount * (interestRate / 100);
   const annualRental = weeklyRent * 52;
   const annualMgmtFees = annualRental * 0.08;
@@ -472,7 +552,7 @@ function PredictorTab() {
         weekly_rent: weeklyRent,
         property_type: form.property_type,
         location: form.location,
-        existing_portfolio_context: `Portfolio in Finley, Kirwan, Chigwell. State: ${state}. Ownership: ${structure}. Stamp duty: ${formatCurrency(stampDuty)}. LMI: ${formatCurrency(lmi)}. Total cash required: ${formatCurrency(totalCashRequired)}. After-tax cashflow: ${formatCurrency(afterTaxMonthlyCashflow)}/mo. Land tax (QLD): ${formatCurrency(annualLandTax)}/yr.`,
+        existing_portfolio_context: `Portfolio in Finley, Kirwan, Chigwell. State: ${state}. Ownership: ${structure}. Stamp duty: ${formatCurrency(stampDuty)}. LMI: ${formatCurrency(lmi)}. Total cash required: ${formatCurrency(totalCashRequired)}. After-tax cashflow: ${formatCurrency(afterTaxMonthlyCashflow)}/mo. Land tax (${state}): ${formatCurrency(annualLandTax)}/yr.`,
       };
       const res = await fetch(`${API_URL}/api/ai/purchase-predictor`, {
         method: 'POST',
@@ -686,14 +766,12 @@ function PredictorTab() {
               <span className="text-slate-500">Council Rates</span>
               <span>{formatCurrency(annualCouncilRates)}</span>
             </div>
-            {state === 'QLD' && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">QLD Land Tax (est. land {formatCurrency(estimatedLandValue)})</span>
-                <span className={annualLandTax > 0 ? 'font-semibold text-orange-700' : 'text-slate-400'}>
-                  {annualLandTax > 0 ? formatCurrency(annualLandTax) : `Below ${structure === 'individual' ? '$600k' : '$350k'} threshold`}
-                </span>
-              </div>
-            )}
+            <div className="flex justify-between">
+              <span className="text-slate-500">{state} Land Tax (est. land {formatCurrency(estimatedLandValue)})</span>
+              <span className={annualLandTax > 0 ? 'font-semibold text-orange-700' : 'text-slate-400'}>
+                {state === 'ACT' ? 'Included in general rates' : state === 'NT' ? 'No land tax (NT)' : annualLandTax > 0 ? formatCurrency(annualLandTax) : `Below threshold (${landTaxThresholdLabel(structure, state)})`}
+              </span>
+            </div>
             <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold">
               <span>Net Rental Income for Tax</span>
               <span className={netRentalForTax >= 0 ? 'text-green-700' : 'text-red-700'}>
@@ -753,7 +831,7 @@ function PredictorTab() {
             </div>
             {taxNote && <p className="text-xs text-slate-400 mt-3 border-t border-slate-700 pt-2">{taxNote}</p>}
             <p className="text-xs text-slate-500 mt-2">
-              * Deductions: interest (IO), PM fees ~8%, council rates{state === 'QLD' ? ', QLD land tax' : ''}. Estimate only — seek professional tax advice.
+              * Deductions: interest (IO), PM fees ~8%, council rates{annualLandTax > 0 ? `, ${state} land tax` : ''}. Estimate only — seek professional tax advice.
             </p>
           </div>
         </>
