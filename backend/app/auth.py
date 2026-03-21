@@ -1,5 +1,7 @@
 import os
+import json
 import secrets
+import urllib.request
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -15,6 +17,31 @@ from app import models
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fxpwhhtwuwqyclrkhexg.supabase.co")
+_supabase_jwks: Optional[dict] = None
+
+
+def _get_supabase_jwks() -> dict:
+    global _supabase_jwks
+    if _supabase_jwks is None:
+        url = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            _supabase_jwks = json.loads(resp.read())
+    return _supabase_jwks
+
+
+def _verify_supabase_token(token: str) -> Optional[dict]:
+    try:
+        jwks = _get_supabase_jwks()
+        header = jwt.get_unverified_header(token)
+        kid = header.get("kid")
+        key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+        if not key:
+            return None
+        return jwt.decode(token, key, algorithms=["ES256"], audience="authenticated")
+    except Exception:
+        return None
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -58,23 +85,14 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # 1. Try Supabase JWT first
-    supabase_secret = os.environ.get("SUPABASE_JWT_SECRET")
-    if supabase_secret:
-        try:
-            payload = jwt.decode(
-                token,
-                supabase_secret,
-                algorithms=["HS256"],
-                audience="authenticated",
-            )
-            email: str = payload.get("email")
-            if email:
-                meta = payload.get("user_metadata") or {}
-                name = meta.get("full_name") or meta.get("name") or email.split("@")[0]
-                return _find_or_create_user(email, name, db)
-        except JWTError:
-            pass
+    # 1. Try Supabase JWT (ES256 via JWKS)
+    payload = _verify_supabase_token(token)
+    if payload:
+        email: str = payload.get("email")
+        if email:
+            meta = payload.get("user_metadata") or {}
+            name = meta.get("full_name") or meta.get("name") or email.split("@")[0]
+            return _find_or_create_user(email, name, db)
 
     # 2. Fall back to our own JWT (email/password via seeded users)
     try:
