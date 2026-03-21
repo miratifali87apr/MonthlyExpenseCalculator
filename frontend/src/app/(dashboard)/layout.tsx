@@ -14,19 +14,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.replace('/login');
-        return;
-      }
-      setUserEmail(session.user.email ?? undefined);
-      setUserName(session.user.user_metadata?.full_name ?? session.user.email?.split('@')[0]);
-      setIsChecking(false);
-    });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
+      if (event === 'INITIAL_SESSION') {
+        if (!session) {
+          router.replace('/login');
+        } else {
+          setUserEmail(session.user.email ?? undefined);
+          setUserName(session.user.user_metadata?.full_name ?? session.user.email?.split('@')[0]);
+          setIsChecking(false);
+        }
+      } else if (event === 'SIGNED_OUT') {
         router.replace('/login');
+      } else if (event === 'SIGNED_IN' && session) {
+        setUserEmail(session.user.email ?? undefined);
+        setUserName(session.user.user_metadata?.full_name ?? session.user.email?.split('@')[0]);
+        setIsChecking(false);
       }
     });
 
