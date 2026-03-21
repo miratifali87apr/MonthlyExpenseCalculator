@@ -237,20 +237,21 @@ function PortfolioTab({ properties }: { properties: Property[] }) {
 type OwnershipStructure = 'individual' | 'trust' | 'company' | 'smsf';
 type AusState = 'QLD' | 'NSW' | 'VIC' | 'WA' | 'SA' | 'TAS' | 'ACT' | 'NT';
 
-// 2024-25 Australian marginal tax rates (incl. 2% Medicare levy)
+// 2024-25 Australian marginal tax rates (Stage 3 cuts, incl. 2% Medicare levy)
+// Brackets: $0-18,200 nil | $18,201-45,000 19% | $45,001-135,000 32.5% | $135,001-190,000 37% | $190,001+ 45%
 function getMarginalRate(income: number): number {
   if (income <= 18200) return 0;
-  if (income <= 45000) return 0.21;
-  if (income <= 120000) return 0.345;
-  if (income <= 180000) return 0.39;
-  return 0.47;
+  if (income <= 45000) return 0.21;   // 19% + 2%
+  if (income <= 135000) return 0.345; // 32.5% + 2%
+  if (income <= 190000) return 0.39;  // 37% + 2%
+  return 0.47;                        // 45% + 2%
 }
 
 function getMarginalRateLabel(income: number): string {
   if (income <= 18200) return '0% — Nil bracket';
   if (income <= 45000) return '21% (19% + 2% Medicare)';
-  if (income <= 120000) return '34.5% (32.5% + 2% Medicare)';
-  if (income <= 180000) return '39% (37% + 2% Medicare)';
+  if (income <= 135000) return '34.5% (32.5% + 2% Medicare)';
+  if (income <= 190000) return '39% (37% + 2% Medicare)';
   return '47% (45% + 2% Medicare)';
 }
 
@@ -936,7 +937,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function InsightsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('portfolio');
+  const [activeTab, setActiveTab] = useState<Tab>('predictor');
 
   const { data: properties = [], isLoading: propsLoading } = useQuery({
     queryKey: ['properties'],
