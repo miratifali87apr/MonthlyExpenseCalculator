@@ -280,7 +280,8 @@ function calcStampDuty(price: number, state: AusState): number {
       if (price <= 80000) return 415 + (price - 30000) * 0.0175;
       if (price <= 300000) return 1290 + (price - 80000) * 0.035;
       if (price <= 1000000) return 8990 + (price - 300000) * 0.045;
-      return 40490 + (price - 1000000) * 0.055;
+      if (price <= 3000000) return 40490 + (price - 1000000) * 0.055;
+      return 150490 + (price - 3000000) * 0.07; // Premium property duty $3M+
     }
     case 'VIC': {
       if (price <= 25000) return price * 0.014;
@@ -289,11 +290,12 @@ function calcStampDuty(price: number, state: AusState): number {
       return 52670 + (price - 960000) * 0.065;
     }
     case 'WA': {
-      if (price <= 80000) return price * 0.019;
-      if (price <= 100000) return 1520 + (price - 80000) * 0.0285;
-      if (price <= 250000) return 2090 + (price - 100000) * 0.038;
-      if (price <= 500000) return 7790 + (price - 250000) * 0.0475;
-      return 19665 + (price - 500000) * 0.0515;
+      // Revenue WA — Dutiable value thresholds (investment property rates)
+      if (price <= 120000) return price * 0.019;
+      if (price <= 150000) return 2280 + (price - 120000) * 0.0285;
+      if (price <= 360000) return 3135 + (price - 150000) * 0.038;
+      if (price <= 725000) return 11115 + (price - 360000) * 0.0475;
+      return 28453 + (price - 725000) * 0.0515;
     }
     case 'SA': {
       if (price <= 12000) return price * 0.01;
@@ -353,27 +355,22 @@ function calcLandTax(landValue: number, structure: OwnershipStructure, state: Au
       return 45150 + (landValue - 3000000) * 0.025;
     }
     case 'VIC': {
-      // Individual/SMSF threshold $300k; Trust $25k with +0.5% surcharge
+      // SRO Victoria 2024-25: Individual/SMSF threshold $300k; Trust $25k + 0.5% surcharge
+      // Standard tax brackets only apply above $300k (for ALL structures)
+      // Trust pays: standard tax (if > $300k) PLUS 0.5% surcharge on value above $25k
       const threshold = isTrust ? 25000 : 300000;
       if (landValue <= threshold) return 0;
-      // Standard rate table (brackets always anchored at $300k)
-      let tax = 0;
-      if (landValue <= 300000) {
-        tax = (landValue - threshold) * 0.002; // below $300k, trust only
-      } else if (landValue <= 600000) {
-        tax = 375 + (landValue - 300000) * 0.002;
-      } else if (landValue <= 1000000) {
-        tax = 975 + (landValue - 600000) * 0.005;
-      } else if (landValue <= 1800000) {
-        tax = 2975 + (landValue - 1000000) * 0.008;
-      } else if (landValue <= 3000000) {
-        tax = 9375 + (landValue - 1800000) * 0.013;
-      } else {
-        tax = 24975 + (landValue - 3000000) * 0.0255;
+      let standardTax = 0;
+      if (landValue > 300000) {
+        if (landValue <= 600000) standardTax = 375 + (landValue - 300000) * 0.002;
+        else if (landValue <= 1000000) standardTax = 975 + (landValue - 600000) * 0.005;
+        else if (landValue <= 1800000) standardTax = 2975 + (landValue - 1000000) * 0.008;
+        else if (landValue <= 3000000) standardTax = 9375 + (landValue - 1800000) * 0.013;
+        else standardTax = 24975 + (landValue - 3000000) * 0.0255;
       }
-      // Trust surcharge: +0.5% on taxable value above $25k
-      if (isTrust) tax += (landValue - 25000) * 0.005;
-      return tax;
+      // Trust surcharge: +0.5% on all land value above $25k (regardless of standard tax)
+      const trustSurcharge = isTrust ? (landValue - 25000) * 0.005 : 0;
+      return standardTax + trustSurcharge;
     }
     case 'NSW': {
       // Threshold $1,075,000 (2024-25, adjusted annually by CPI)
@@ -895,6 +892,23 @@ function PredictorTab() {
           </Card>
         </div>
       )}
+
+      {/* Disclaimer */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Important Disclaimer — General Information Only</p>
+        <p className="text-xs text-amber-900 leading-relaxed">
+          All figures are <strong>estimates only</strong> based on publicly available 2024-25 rates and are provided for indicative purposes. This tool does <strong>not</strong> constitute financial, tax, or legal advice. You should consult a <strong>registered tax agent or accountant</strong> (CPA/CA), a qualified property lawyer or conveyancer, and a licensed financial adviser before making any investment decision.
+        </p>
+        <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
+          <li><strong>Stamp duty / transfer duty:</strong> Rates and thresholds are indexed annually by each state revenue office. Concessions, surcharges (e.g. foreign purchaser: VIC 8%, NSW 8%, QLD 7%), and off-the-plan discounts are <em>not</em> included.</li>
+          <li><strong>Land tax:</strong> Land value is estimated at 30% of purchase price — actual unimproved capital value (UCV) set by the state valuer-general may differ significantly. VIC COVID debt levy (+0.1–0.2%) may apply Jan 2024 onwards for some landholdings.</li>
+          <li><strong>Tax brackets:</strong> 2024-25 Stage 3 rates apply from 1 July 2024. Medicare Levy Surcharge, HECS/HELP repayments, and low-income offsets are not included.</li>
+          <li><strong>Deductions excluded:</strong> Depreciation (Div 43 building allowance &amp; Div 40 plant/equipment), body corporate fees, insurance, maintenance, water rates, and borrowing costs may all be deductible — a quantity surveyor&apos;s report is recommended.</li>
+          <li><strong>Trust / Company / SMSF:</strong> Structural decisions have significant legal, stamp duty, and ongoing compliance cost implications. The trust surcharge, company franking rules, and SMSF LRBA requirements are complex — specialist advice is essential.</li>
+          <li><strong>LMI:</strong> Estimated using indicative Helia/QBE tiered rates. Actual premiums vary by lender, loan purpose, and borrower profile.</li>
+        </ul>
+        <p className="text-xs text-amber-700">Rates sourced from: ATO, Revenue NSW, SRO Victoria, Queensland Revenue Office, Revenue WA, RevenueSA, State Revenue Office Tasmania, ACT Revenue Office. Verify all figures with the relevant authority before transacting.</p>
+      </div>
     </div>
   );
 }
