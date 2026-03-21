@@ -5,7 +5,7 @@ export type Category =
 
 export type Frequency = 'monthly' | 'quarterly' | 'weekly' | 'fortnightly' | 'ad_hoc';
 
-export type PaymentStatus = 'pending' | 'paid' | 'overdue' | 'funded';
+export type PaymentStatus = 'pending' | 'paid' | 'overdue' | 'funded' | 'partial';
 
 export type IncomeType = 'salary' | 'rental' | 'reimbursement' | 'other';
 
@@ -44,6 +44,7 @@ export interface ExpenseItem {
   name: string;
   category: Category;
   amount: number;
+  amount_paid?: number;
   due_date: string;
   paid_date?: string;
   status: PaymentStatus;

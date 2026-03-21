@@ -117,7 +117,68 @@ const STATUS_BADGE_MAP: Record<string, 'success' | 'warning' | 'danger' | 'info'
   pending: 'warning',
   overdue: 'danger',
   funded: 'info',
+  partial: 'warning',
 };
+
+function PartialPayModal({ expense, onClose, onSaved }: { expense: ExpenseItem; onClose: () => void; onSaved: () => void }) {
+  const remaining = expense.amount - (expense.amount_paid ?? 0);
+  const [amount, setAmount] = useState(String(remaining.toFixed(2)));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    const val = parseFloat(amount);
+    if (!val || val <= 0) { setError('Enter a valid amount.'); return; }
+    if (val > remaining) { setError(`Cannot pay more than remaining balance ${formatCurrency(remaining)}.`); return; }
+    setSaving(true); setError('');
+    try {
+      await expensesApi.partialPay(expense.id, val);
+      onSaved(); onClose();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed.'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h2 className="font-bold text-slate-900">Partial Payment</h2>
+          <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Total</span>
+              <span className="font-medium text-slate-900">{formatCurrency(expense.amount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Already paid</span>
+              <span className="font-medium text-green-700">{formatCurrency(expense.amount_paid ?? 0)}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-200 pt-1">
+              <span className="text-slate-700 font-medium">Remaining</span>
+              <span className="font-bold text-red-600">{formatCurrency(remaining)}</span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Payment Amount ($)</label>
+            <input
+              type="number" step="0.01"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+            />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>Record Payment</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ExpensesPage() {
   const now = dayjs();
@@ -127,6 +188,7 @@ export default function ExpensesPage() {
   const [category, setCategory] = useState<string>('');
   const [actionId, setActionId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [partialPayExpense, setPartialPayExpense] = useState<ExpenseItem | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('due_date');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -221,6 +283,13 @@ export default function ExpensesPage() {
           onSaved={() => queryClient.invalidateQueries({ queryKey })}
         />
       )}
+      {partialPayExpense && (
+        <PartialPayModal
+          expense={partialPayExpense}
+          onClose={() => setPartialPayExpense(null)}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey }); }}
+        />
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-900">Expenses</h1>
         <Button size="sm" onClick={() => setShowAdd(true)}>
@@ -289,6 +358,11 @@ export default function ExpensesPage() {
                       </Badge>
                     </div>
                   </div>
+                  {item.status === 'partial' && (
+                    <p className="text-xs text-amber-700 mb-1">
+                      Paid {formatCurrency(item.amount_paid ?? 0)} · Remaining {formatCurrency(item.amount - (item.amount_paid ?? 0))}
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[item.category] ?? 'bg-gray-100 text-gray-800'}`}>
                       {CATEGORY_LABELS[item.category] ?? item.category}
@@ -310,6 +384,7 @@ export default function ExpensesPage() {
                       ) : (
                         <>
                           <Button variant="success" size="sm" loading={actionId === item.id} onClick={() => handleMarkPaid(item.id)}>Paid</Button>
+                          <Button variant="ghost" size="sm" onClick={() => setPartialPayExpense(item)}>Part Pay</Button>
                           <Button variant="info" size="sm" loading={actionId === item.id}
                             onClick={async () => { setActionId(item.id); try { await expensesApi.fund(item.id); await invalidate(); } finally { setActionId(null); } }}>
                             Fund
@@ -375,6 +450,9 @@ export default function ExpensesPage() {
                       </td>
                       <td className="py-3 pr-4 text-right font-medium text-slate-900">
                         {formatCurrency(item.amount)}
+                        {item.status === 'partial' && (
+                          <p className="text-xs font-normal text-amber-600">{formatCurrency(item.amount - (item.amount_paid ?? 0))} left</p>
+                        )}
                       </td>
                       <td className="py-3 pr-4">
                         <Badge variant={STATUS_BADGE_MAP[item.status] ?? 'default'}>
@@ -404,6 +482,9 @@ export default function ExpensesPage() {
                               <Button variant="success" size="sm" loading={actionId === item.id}
                                 onClick={() => handleMarkPaid(item.id)}>
                                 Mark Paid
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => setPartialPayExpense(item)}>
+                                Part Pay
                               </Button>
                               <Button variant="info" size="sm" loading={actionId === item.id}
                                 onClick={async () => { setActionId(item.id); try { await expensesApi.fund(item.id); await invalidate(); } finally { setActionId(null); } }}>

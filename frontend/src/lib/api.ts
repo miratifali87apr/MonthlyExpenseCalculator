@@ -93,6 +93,11 @@ export const expensesApi = {
     request<ExpenseItem>(`/api/expenses/${id}/unpay`, { method: 'PATCH' }),
   fund: (id: number) =>
     request<ExpenseItem>(`/api/expenses/${id}/fund`, { method: 'PATCH' }),
+  partialPay: (id: number, amount: number) =>
+    request<ExpenseItem>(`/api/expenses/${id}/partial-pay`, {
+      method: 'PATCH',
+      body: JSON.stringify({ amount }),
+    }),
   generateUpcoming: () =>
     request<{ generated: number }>('/api/expenses/generate-upcoming', {
       method: 'POST',

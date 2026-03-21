@@ -96,6 +96,7 @@ class ExpenseItemBase(BaseModel):
     name: str
     category: str
     amount: float
+    amount_paid: float = 0
     due_date: datetime
     paid_date: Optional[datetime] = None
     status: str = "pending"
@@ -133,6 +134,8 @@ class ExpenseItemResponse(ExpenseItemBase):
     def model_post_init(self, __context):
         if isinstance(self.amount, Decimal):
             object.__setattr__(self, "amount", float(self.amount))
+        if isinstance(self.amount_paid, Decimal):
+            object.__setattr__(self, "amount_paid", float(self.amount_paid))
 
 
 # ---------------------------------------------------------------------------

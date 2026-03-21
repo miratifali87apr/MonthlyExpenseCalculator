@@ -58,9 +58,10 @@ class ExpenseItem(Base):
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
+    amount_paid = Column(Numeric(10, 2), nullable=True, default=0)
     due_date = Column(DateTime(timezone=True), nullable=False)
     paid_date = Column(DateTime(timezone=True), nullable=True)
-    status = Column(String, default="pending")  # pending, paid, overdue
+    status = Column(String, default="pending")  # pending, partial, paid, overdue, funded
     notes = Column(Text, nullable=True)
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
     template_id = Column(Integer, ForeignKey("recurring_templates.id"), nullable=True)

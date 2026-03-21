@@ -8,6 +8,7 @@ import { PageSpinner } from '@/components/ui/Spinner';
 import { Badge } from '@/components/ui/Badge';
 import { propertiesApi, recurringApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 import type { Property, RecurringTemplate } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -47,9 +48,10 @@ type Tab = 'portfolio' | 'predictor' | 'holding';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getAuthToken(): string {
+async function getAuthToken(): Promise<string> {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem('finance_token') ?? '';
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? '';
 }
 
 function scoreColor(score: number): string {
@@ -99,7 +101,7 @@ function PortfolioTab({ properties }: { properties: Property[] }) {
     setLoading(true);
     setError(null);
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const payload = {
         properties: properties.map((p) => ({
           name: p.name,
@@ -267,7 +269,7 @@ function PredictorTab() {
     setLoading(true);
     setError(null);
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
       const payload = {
         purchase_price: purchasePrice,
         loan_amount: loanAmount,

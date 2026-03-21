@@ -2,12 +2,17 @@ from datetime import datetime, timezone, date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models
 from app.schemas import ExpenseItemCreate, ExpenseItemUpdate, ExpenseItemResponse
 from app.auth import get_current_user
+
+
+class PartialPayRequest(BaseModel):
+    amount: float
 
 router = APIRouter()
 
@@ -159,6 +164,34 @@ def mark_funded(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
     expense.status = "funded"
+    db.commit()
+    db.refresh(expense)
+    return ExpenseItemResponse.model_validate(expense)
+
+
+@router.patch("/{expense_id}/partial-pay", response_model=ExpenseItemResponse)
+def partial_pay(
+    expense_id: int,
+    data: PartialPayRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    expense = db.query(models.ExpenseItem).filter(models.ExpenseItem.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    current_paid = float(expense.amount_paid or 0)
+    new_paid = current_paid + data.amount
+    total = float(expense.amount)
+
+    expense.amount_paid = min(new_paid, total)
+
+    if expense.amount_paid >= total:
+        expense.status = "paid"
+        expense.paid_date = datetime.now(timezone.utc)
+    else:
+        expense.status = "partial"
+
     db.commit()
     db.refresh(expense)
     return ExpenseItemResponse.model_validate(expense)
