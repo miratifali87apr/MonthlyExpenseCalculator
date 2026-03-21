@@ -498,18 +498,13 @@ function PredictorTab() {
       }
     }
   } else if (structure === 'trust') {
-    const perBeneIncome = salary > 0 ? salary / numBeneficiaries : 0;
-    const distRate = perBeneIncome > 0 ? getMarginalRate(perBeneIncome) : 0;
-    taxRate = distRate;
-    taxRateLabel = salary > 0
-      ? `${(distRate * 100).toFixed(0)}% (${formatCurrency(perBeneIncome)}/beneficiary)`
-      : 'Enter beneficiary income to calculate';
+    taxRate = 0;
+    taxRateLabel = 'No tax benefit at trust level';
+    monthlyTaxBenefit = 0;
     if (netRentalForTax < 0) {
-      monthlyTaxBenefit = 0;
-      taxNote = 'Trust losses are carried forward internally — no immediate tax deduction. Profits distributed at beneficiary marginal rates.';
-    } else if (salary > 0) {
-      monthlyTaxBenefit = -(netRentalForTax * distRate) / 12;
-      taxNote = `Net income ${formatCurrency(netRentalForTax)}/yr distributed across ${numBeneficiaries} beneficiar${numBeneficiaries > 1 ? 'ies' : 'y'} at ${(distRate * 100).toFixed(0)}%`;
+      taxNote = 'Trust losses cannot be distributed to beneficiaries — carried forward internally. No negative gearing benefit.';
+    } else {
+      taxNote = 'Trust distributes net income to beneficiaries who pay tax at their own marginal rates. No tax benefit is modelled here — consult your accountant for distribution planning.';
     }
   } else if (structure === 'company') {
     taxRate = 0.25;
@@ -665,26 +660,12 @@ function PredictorTab() {
             </div>
           </div>
 
-          {(structure === 'individual' || structure === 'trust') && (
+          {structure === 'individual' && (
             <div>
-              <label className={labelCls}>
-                {structure === 'trust' ? 'Total Beneficiary Income (AUD/yr)' : 'Annual Salary / Other Income (AUD)'}
-              </label>
+              <label className={labelCls}>Annual Salary / Other Income (AUD)</label>
               <input type="number" className={inputCls} placeholder="e.g. 120000" value={annualSalary} onChange={(e) => setAnnualSalary(e.target.value)} />
-              {salary > 0 && structure === 'individual' && (
+              {salary > 0 && (
                 <p className="text-xs text-slate-500 mt-1">Marginal rate: {getMarginalRateLabel(salary)}</p>
-              )}
-            </div>
-          )}
-
-          {structure === 'trust' && (
-            <div>
-              <label className={labelCls}>Number of Beneficiaries</label>
-              <input type="number" min="1" className={inputCls} value={beneficiaries} onChange={(e) => setBeneficiaries(e.target.value)} />
-              {salary > 0 && numBeneficiaries > 0 && (
-                <p className="text-xs text-slate-500 mt-1">
-                  {formatCurrency(salary / numBeneficiaries)}/person → {getMarginalRateLabel(salary / numBeneficiaries)}
-                </p>
               )}
             </div>
           )}
@@ -702,9 +683,9 @@ function PredictorTab() {
             </div>
           )}
           {structure === 'trust' && (
-            <div className="sm:col-span-2 bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800 space-y-1">
-              <p><strong>Discretionary Trust:</strong> Trust losses cannot be distributed — carried forward internally.</p>
-              <p>Positive income split among beneficiaries at their marginal rates. 50% CGT discount passes to individual beneficiaries.</p>
+            <div className="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 space-y-1">
+              <p><strong>Discretionary Trust:</strong> No tax benefit is modelled for this structure.</p>
+              <p>Losses cannot be distributed — they stay inside the trust indefinitely. Profits are distributed to beneficiaries who pay tax at their own marginal rates. The CGT 50% discount can pass through to individual beneficiaries. Consult your accountant for distribution planning.</p>
             </div>
           )}
         </div>
