@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 
 interface NavItem {
   href: string;
@@ -39,8 +40,8 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
-  function handleLogout() {
-    localStorage.removeItem('finance_token');
+  async function handleLogout() {
+    await supabase.auth.signOut();
     router.push('/login');
   }
 
