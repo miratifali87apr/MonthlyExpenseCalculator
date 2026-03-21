@@ -365,6 +365,8 @@ function PredictorTab() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PurchaseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showTax, setShowTax] = useState(true);
+  const [showCosts, setShowCosts] = useState(true);
 
   const purchasePrice = parseFloat(form.purchase_price) || 0;
   const deposit = parseFloat(form.deposit) || 20;
@@ -479,6 +481,8 @@ function PredictorTab() {
       });
       if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
       setResult(await res.json());
+      setShowTax(false);
+      setShowCosts(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -552,7 +556,15 @@ function PredictorTab() {
       </Card>
 
       {/* Ownership & Tax Structure */}
-      <Card title="Ownership & Tax Structure">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition-colors"
+          onClick={() => setShowTax(v => !v)}
+        >
+          Ownership & Tax Structure
+          <span className="text-slate-400 text-xs">{showTax ? '▲ collapse' : '▼ expand'}</span>
+        </button>
+        {showTax && <div className="px-4 pb-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label className={labelCls}>Ownership Structure</label>
@@ -619,11 +631,20 @@ function PredictorTab() {
             </div>
           )}
         </div>
-      </Card>
+        </div>}
+      </div>
 
       {/* Acquisition Costs */}
       {purchasePrice > 0 && (
-        <Card title={`Acquisition Costs — ${state} (Investment Property)`}>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition-colors"
+          onClick={() => setShowCosts(v => !v)}
+        >
+          {`Acquisition Costs — ${state} (Investment Property)`}
+          <span className="text-slate-400 text-xs">{showCosts ? '▲ collapse' : '▼ expand'}</span>
+        </button>
+        {showCosts && <div className="px-4 pb-4">
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-500">Purchase Price</span>
@@ -683,7 +704,8 @@ function PredictorTab() {
               </span>
             </div>
           </div>
-        </Card>
+        </div>}
+        </div>
       )}
 
       {/* Live Calculations */}
