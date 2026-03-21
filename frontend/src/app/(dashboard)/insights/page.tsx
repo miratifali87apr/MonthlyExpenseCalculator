@@ -888,7 +888,7 @@ function PredictorTab() {
           <li><strong>Trust / Company / SMSF:</strong> Structural decisions have significant legal, stamp duty, and ongoing compliance cost implications. The trust surcharge, company franking rules, and SMSF LRBA requirements are complex — specialist advice is essential.</li>
           <li><strong>LMI:</strong> Estimated using indicative Helia/QBE tiered rates. Actual premiums vary by lender, loan purpose, and borrower profile.</li>
         </ul>
-        <p className="text-xs text-amber-700">Rates sourced from: ATO, Revenue NSW, SRO Victoria, Queensland Revenue Office, Revenue WA, RevenueSA, State Revenue Office Tasmania, ACT Revenue Office. Verify all figures with the relevant authority before transacting.</p>
+        <p className="text-xs text-amber-700">Verify current rates directly with the relevant state revenue authority before transacting: QLD — qro.qld.gov.au | VIC — sro.vic.gov.au | NSW — revenue.nsw.gov.au | WA — revenue.wa.gov.au | SA — revenuesa.sa.gov.au | TAS — sro.tas.gov.au | ACT — revenue.act.gov.au</p>
       </div>
     </div>
   );
