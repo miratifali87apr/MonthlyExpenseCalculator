@@ -234,6 +234,118 @@ function PortfolioTab({ properties }: { properties: Property[] }) {
 
 // ─── Tab: Purchase Predictor ──────────────────────────────────────────────────
 
+type OwnershipStructure = 'individual' | 'trust' | 'company' | 'smsf';
+type AusState = 'QLD' | 'NSW' | 'VIC' | 'WA' | 'SA' | 'TAS' | 'ACT' | 'NT';
+
+// 2024-25 Australian marginal tax rates (incl. 2% Medicare levy)
+function getMarginalRate(income: number): number {
+  if (income <= 18200) return 0;
+  if (income <= 45000) return 0.21;
+  if (income <= 120000) return 0.345;
+  if (income <= 180000) return 0.39;
+  return 0.47;
+}
+
+function getMarginalRateLabel(income: number): string {
+  if (income <= 18200) return '0% — Nil bracket';
+  if (income <= 45000) return '21% (19% + 2% Medicare)';
+  if (income <= 120000) return '34.5% (32.5% + 2% Medicare)';
+  if (income <= 180000) return '39% (37% + 2% Medicare)';
+  return '47% (45% + 2% Medicare)';
+}
+
+// LMI estimate — Helia/QBE tiered rates
+function calcLMI(loanAmount: number, lvr: number): number {
+  if (lvr <= 80) return 0;
+  if (lvr <= 85) return loanAmount * 0.009;
+  if (lvr <= 90) return loanAmount * 0.018;
+  if (lvr <= 95) return loanAmount * 0.038;
+  return 0;
+}
+
+// Stamp duty — investment property, not first home buyer
+function calcStampDuty(price: number, state: AusState): number {
+  switch (state) {
+    case 'QLD': {
+      if (price <= 5000) return 0;
+      if (price <= 75000) return (price - 5000) * 0.015;
+      if (price <= 540000) return 1050 + (price - 75000) * 0.035;
+      if (price <= 1000000) return 17325 + (price - 540000) * 0.045;
+      return 38025 + (price - 1000000) * 0.0575;
+    }
+    case 'NSW': {
+      if (price <= 14000) return price * 0.0125;
+      if (price <= 30000) return 175 + (price - 14000) * 0.015;
+      if (price <= 80000) return 415 + (price - 30000) * 0.0175;
+      if (price <= 300000) return 1290 + (price - 80000) * 0.035;
+      if (price <= 1000000) return 8990 + (price - 300000) * 0.045;
+      return 40490 + (price - 1000000) * 0.055;
+    }
+    case 'VIC': {
+      if (price <= 25000) return price * 0.014;
+      if (price <= 130000) return 350 + (price - 25000) * 0.024;
+      if (price <= 960000) return 2870 + (price - 130000) * 0.06;
+      return 52670 + (price - 960000) * 0.065;
+    }
+    case 'WA': {
+      if (price <= 80000) return price * 0.019;
+      if (price <= 100000) return 1520 + (price - 80000) * 0.0285;
+      if (price <= 250000) return 2090 + (price - 100000) * 0.038;
+      if (price <= 500000) return 7790 + (price - 250000) * 0.0475;
+      return 19665 + (price - 500000) * 0.0515;
+    }
+    case 'SA': {
+      if (price <= 12000) return price * 0.01;
+      if (price <= 30000) return 120 + (price - 12000) * 0.02;
+      if (price <= 50000) return 480 + (price - 30000) * 0.03;
+      if (price <= 100000) return 1080 + (price - 50000) * 0.035;
+      if (price <= 200000) return 2830 + (price - 100000) * 0.04;
+      if (price <= 250000) return 6830 + (price - 200000) * 0.0425;
+      if (price <= 300000) return 8955 + (price - 250000) * 0.0475;
+      if (price <= 500000) return 11330 + (price - 300000) * 0.05;
+      return 21330 + (price - 500000) * 0.055;
+    }
+    case 'TAS': {
+      if (price <= 3000) return 50;
+      if (price <= 25000) return 50 + (price - 3000) * 0.015;
+      if (price <= 75000) return 380 + (price - 25000) * 0.0225;
+      if (price <= 200000) return 1505 + (price - 75000) * 0.035;
+      if (price <= 375000) return 5880 + (price - 200000) * 0.04;
+      if (price <= 725000) return 12880 + (price - 375000) * 0.0425;
+      return 27755 + (price - 725000) * 0.045;
+    }
+    case 'ACT': {
+      if (price <= 200000) return price * 0.0206;
+      if (price <= 300000) return 4120 + (price - 200000) * 0.0292;
+      if (price <= 500000) return 7040 + (price - 300000) * 0.0399;
+      if (price <= 750000) return 15020 + (price - 500000) * 0.0499;
+      if (price <= 1000000) return 27495 + (price - 750000) * 0.0649;
+      return 43720 + (price - 1000000) * 0.0699;
+    }
+    case 'NT': {
+      if (price <= 525000) {
+        const v = price / 1000;
+        return Math.max(0, (0.06571441 * v * v + 15 * v - 12000) * 0.01);
+      }
+      return price * 0.0495;
+    }
+    default: return 0;
+  }
+}
+
+// QLD land tax (annual, on unimproved land value estimated at 30% of purchase price)
+function calcLandTaxQLD(landValue: number, structure: OwnershipStructure): number {
+  const threshold = structure === 'individual' ? 600000 : 350000;
+  if (landValue <= threshold) return 0;
+  if (structure === 'individual') {
+    if (landValue <= 999999) return 500 + (landValue - 600000) * 0.01;
+    if (landValue <= 2999999) return 4500 + (landValue - 1000000) * 0.0165;
+    return 37500 + (landValue - 3000000) * 0.0225;
+  }
+  if (landValue <= 2999999) return 1450 + (landValue - 350000) * 0.017;
+  return 45150 + (landValue - 3000000) * 0.025;
+}
+
 function PredictorTab() {
   const [form, setForm] = useState({
     location: '',
@@ -243,6 +355,11 @@ function PredictorTab() {
     weekly_rent: '',
     property_type: 'House',
   });
+  const [state, setState] = useState<AusState>('QLD');
+  const [structure, setStructure] = useState<OwnershipStructure>('individual');
+  const [annualSalary, setAnnualSalary] = useState('');
+  const [beneficiaries, setBeneficiaries] = useState('1');
+  const [councilRates, setCouncilRates] = useState('2000');
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PurchaseResult | null>(null);
@@ -252,7 +369,11 @@ function PredictorTab() {
   const deposit = parseFloat(form.deposit) || 20;
   const interestRate = parseFloat(form.interest_rate) || 6.5;
   const weeklyRent = parseFloat(form.weekly_rent) || 0;
+  const salary = parseFloat(annualSalary) || 0;
+  const numBeneficiaries = parseInt(beneficiaries) || 1;
+  const annualCouncilRates = parseFloat(councilRates) || 0;
 
+  const lvr = 100 - deposit;
   const loanAmount = purchasePrice * (1 - deposit / 100);
   const monthlyRate = interestRate / 100 / 12;
   const monthlyRepayment =
@@ -263,7 +384,78 @@ function PredictorTab() {
   const grossYield = purchasePrice > 0 ? (weeklyRent * 52) / purchasePrice * 100 : 0;
   const monthlyCashflow = monthlyRent - monthlyRepayment;
 
-  const hasCalcs = purchasePrice > 0 && weeklyRent > 0;
+  // Acquisition costs
+  const lmi = calcLMI(loanAmount, lvr);
+  const stampDuty = purchasePrice > 0 ? calcStampDuty(purchasePrice, state) : 0;
+  const conveyancing = purchasePrice * 0.002;
+  const totalAcquisitionCosts = stampDuty + lmi + conveyancing;
+  const totalCashRequired = purchasePrice * (deposit / 100) + totalAcquisitionCosts;
+
+  // Ongoing costs & tax calcs
+  const estimatedLandValue = purchasePrice * 0.3;
+  const annualLandTax = state === 'QLD' ? calcLandTaxQLD(estimatedLandValue, structure) : 0;
+  const annualInterest = loanAmount * (interestRate / 100);
+  const annualRental = weeklyRent * 52;
+  const annualMgmtFees = annualRental * 0.08;
+  const annualDeductibles = annualInterest + annualMgmtFees + annualCouncilRates + annualLandTax;
+  const netRentalForTax = annualRental - annualDeductibles;
+
+  let monthlyTaxBenefit = 0;
+  let taxRate = 0;
+  let taxNote = '';
+  let taxRateLabel = '';
+
+  if (structure === 'individual') {
+    taxRate = getMarginalRate(salary);
+    taxRateLabel = salary > 0 ? getMarginalRateLabel(salary) : 'Enter salary to calculate';
+    if (salary > 0) {
+      if (netRentalForTax < 0) {
+        monthlyTaxBenefit = (Math.abs(netRentalForTax) * taxRate) / 12;
+        taxNote = `Negative gearing saves ${formatCurrency(Math.abs(netRentalForTax) * taxRate)}/yr at ${(taxRate * 100).toFixed(0)}% marginal rate`;
+      } else {
+        monthlyTaxBenefit = -(netRentalForTax * taxRate) / 12;
+        taxNote = `Net rental income ${formatCurrency(netRentalForTax)}/yr taxed at ${(taxRate * 100).toFixed(0)}% marginal rate`;
+      }
+    }
+  } else if (structure === 'trust') {
+    const perBeneIncome = salary > 0 ? salary / numBeneficiaries : 0;
+    const distRate = perBeneIncome > 0 ? getMarginalRate(perBeneIncome) : 0;
+    taxRate = distRate;
+    taxRateLabel = salary > 0
+      ? `${(distRate * 100).toFixed(0)}% (${formatCurrency(perBeneIncome)}/beneficiary)`
+      : 'Enter beneficiary income to calculate';
+    if (netRentalForTax < 0) {
+      monthlyTaxBenefit = 0;
+      taxNote = 'Trust losses are carried forward internally — no immediate tax deduction. Profits distributed at beneficiary marginal rates.';
+    } else if (salary > 0) {
+      monthlyTaxBenefit = -(netRentalForTax * distRate) / 12;
+      taxNote = `Net income ${formatCurrency(netRentalForTax)}/yr distributed across ${numBeneficiaries} beneficiar${numBeneficiaries > 1 ? 'ies' : 'y'} at ${(distRate * 100).toFixed(0)}%`;
+    }
+  } else if (structure === 'company') {
+    taxRate = 0.25;
+    taxRateLabel = '25% — Base Rate Entity (Pty Ltd)';
+    if (netRentalForTax < 0) {
+      monthlyTaxBenefit = 0;
+      taxNote = 'Company losses carried forward — no immediate benefit. No CGT 50% discount on sale. Consider trust structure.';
+    } else {
+      monthlyTaxBenefit = -(netRentalForTax * 0.25) / 12;
+      taxNote = 'Profits taxed at 25%. Dividends can be franked. No CGT 50% discount on property sale.';
+    }
+  } else if (structure === 'smsf') {
+    taxRate = 0.15;
+    taxRateLabel = '15% — Accumulation phase (0% in Pension phase)';
+    if (netRentalForTax < 0) {
+      monthlyTaxBenefit = 0;
+      taxNote = 'SMSF losses carried forward. Must use LRBA (limited recourse borrowing). CGT: 10% after 12 months.';
+    } else {
+      monthlyTaxBenefit = -(netRentalForTax * 0.15) / 12;
+      taxNote = '15% on net rental in accumulation phase. 0% in pension phase. 10% CGT after 12 months.';
+    }
+  }
+
+  const afterTaxMonthlyCashflow = monthlyCashflow + monthlyTaxBenefit;
+  const isLand = form.property_type === 'Land';
+  const hasCalcs = purchasePrice > 0 && (weeklyRent > 0 || isLand);
 
   async function getRecommendation() {
     setLoading(true);
@@ -277,25 +469,15 @@ function PredictorTab() {
         weekly_rent: weeklyRent,
         property_type: form.property_type,
         location: form.location,
-        existing_portfolio_context: `Portfolio includes properties in Finley, Kirwan, and Chigwell.`,
+        existing_portfolio_context: `Portfolio in Finley, Kirwan, Chigwell. State: ${state}. Ownership: ${structure}. Stamp duty: ${formatCurrency(stampDuty)}. LMI: ${formatCurrency(lmi)}. Total cash required: ${formatCurrency(totalCashRequired)}. After-tax cashflow: ${formatCurrency(afterTaxMonthlyCashflow)}/mo. Land tax (QLD): ${formatCurrency(annualLandTax)}/yr.`,
       };
-
       const res = await fetch(`${API_URL}/api/ai/purchase-predictor`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `HTTP ${res.status}`);
-      }
-
-      const data: PurchaseResult = await res.json();
-      setResult(data);
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+      setResult(await res.json());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -308,129 +490,257 @@ function PredictorTab() {
     setResult(null);
   }
 
+  const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400';
+  const labelCls = 'block text-xs font-medium text-slate-600 mb-1';
+
   return (
     <div className="space-y-4">
-      {/* Input Form */}
+      {/* Property Details */}
       <Card title="Property Details">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-slate-600 mb-1">Property Location</label>
-            <input
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              placeholder="e.g. Suburb, State"
-              value={form.location}
-              onChange={(e) => update('location', e.target.value)}
-            />
+            <label className={labelCls}>Property Location</label>
+            <input className={inputCls} placeholder="e.g. Suburb, State" value={form.location} onChange={(e) => update('location', e.target.value)} />
           </div>
-
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Purchase Price (AUD)</label>
-            <input
-              type="number"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              placeholder="e.g. 450000"
-              value={form.purchase_price}
-              onChange={(e) => update('purchase_price', e.target.value)}
-            />
+            <label className={labelCls}>Purchase Price (AUD)</label>
+            <input type="number" className={inputCls} placeholder="e.g. 450000" value={form.purchase_price} onChange={(e) => update('purchase_price', e.target.value)} />
           </div>
-
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Deposit %</label>
-            <input
-              type="number"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              value={form.deposit}
-              onChange={(e) => update('deposit', e.target.value)}
-            />
+            <label className={labelCls}>Deposit %</label>
+            <input type="number" className={inputCls} value={form.deposit} onChange={(e) => update('deposit', e.target.value)} />
+            {lvr > 80 && purchasePrice > 0 && (
+              <p className="text-xs text-amber-600 mt-1">LVR {lvr.toFixed(0)}% — LMI applies ({formatCurrency(lmi)})</p>
+            )}
           </div>
-
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Interest Rate %</label>
-            <input
-              type="number"
-              step="0.1"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              value={form.interest_rate}
-              onChange={(e) => update('interest_rate', e.target.value)}
-            />
+            <label className={labelCls}>Interest Rate %</label>
+            <input type="number" step="0.1" className={inputCls} value={form.interest_rate} onChange={(e) => update('interest_rate', e.target.value)} />
           </div>
-
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Weekly Rent Expected (AUD)</label>
-            <input
-              type="number"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              placeholder="e.g. 500"
-              value={form.weekly_rent}
-              onChange={(e) => update('weekly_rent', e.target.value)}
-            />
+            <label className={labelCls}>Weekly Rent Expected (AUD){isLand ? ' — optional for land' : ''}</label>
+            <input type="number" className={inputCls} placeholder={isLand ? '0 (land banking)' : 'e.g. 500'} value={form.weekly_rent} onChange={(e) => update('weekly_rent', e.target.value)} />
           </div>
-
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-slate-600 mb-1">Property Type</label>
-            <select
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
-              value={form.property_type}
-              onChange={(e) => update('property_type', e.target.value)}
-            >
+          <div>
+            <label className={labelCls}>Property Type</label>
+            <select className={`${inputCls} bg-white`} value={form.property_type} onChange={(e) => update('property_type', e.target.value)}>
               <option value="House">House</option>
               <option value="Unit/Apartment">Unit/Apartment</option>
               <option value="Townhouse">Townhouse</option>
               <option value="Land">Land</option>
             </select>
           </div>
+          <div>
+            <label className={labelCls}>State / Territory</label>
+            <select className={`${inputCls} bg-white`} value={state} onChange={(e) => { setState(e.target.value as AusState); setResult(null); }}>
+              <option value="QLD">QLD — Queensland</option>
+              <option value="NSW">NSW — New South Wales</option>
+              <option value="VIC">VIC — Victoria</option>
+              <option value="WA">WA — Western Australia</option>
+              <option value="SA">SA — South Australia</option>
+              <option value="TAS">TAS — Tasmania</option>
+              <option value="ACT">ACT — Capital Territory</option>
+              <option value="NT">NT — Northern Territory</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Annual Council Rates (AUD)</label>
+            <input type="number" className={inputCls} value={councilRates} onChange={(e) => setCouncilRates(e.target.value)} />
+          </div>
         </div>
       </Card>
 
-      {/* Live Calculations */}
-      {hasCalcs && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Loan Amount', value: formatCurrency(loanAmount), neutral: true },
-            { label: 'Monthly Repayment (P&I)', value: formatCurrency(monthlyRepayment), neutral: true },
-            { label: 'Gross Yield', value: `${grossYield.toFixed(2)}%`, neutral: true },
-            {
-              label: 'Monthly Cashflow',
-              value: formatCurrency(monthlyCashflow),
-              positive: monthlyCashflow >= 0,
-            },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm"
-            >
-              <p className="text-xs text-slate-500 mb-1">{stat.label}</p>
-              <p
-                className={`text-base font-bold ${
-                  stat.neutral
-                    ? 'text-slate-900'
-                    : stat.positive
-                    ? 'text-green-700'
-                    : 'text-red-700'
-                }`}
-              >
-                {stat.value}
-              </p>
+      {/* Ownership & Tax Structure */}
+      <Card title="Ownership & Tax Structure">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Ownership Structure</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {([
+                { value: 'individual', label: 'Individual (PAYG)' },
+                { value: 'trust', label: 'Discretionary Trust' },
+                { value: 'company', label: 'Company (Pty Ltd)' },
+                { value: 'smsf', label: 'SMSF' },
+              ] as { value: OwnershipStructure; label: string }[]).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setStructure(opt.value); setResult(null); }}
+                  className={`py-2 px-3 rounded-lg text-xs font-medium border transition-colors text-center ${
+                    structure === opt.value ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {(structure === 'individual' || structure === 'trust') && (
+            <div>
+              <label className={labelCls}>
+                {structure === 'trust' ? 'Total Beneficiary Income (AUD/yr)' : 'Annual Salary / Other Income (AUD)'}
+              </label>
+              <input type="number" className={inputCls} placeholder="e.g. 120000" value={annualSalary} onChange={(e) => setAnnualSalary(e.target.value)} />
+              {salary > 0 && structure === 'individual' && (
+                <p className="text-xs text-slate-500 mt-1">Marginal rate: {getMarginalRateLabel(salary)}</p>
+              )}
+            </div>
+          )}
+
+          {structure === 'trust' && (
+            <div>
+              <label className={labelCls}>Number of Beneficiaries</label>
+              <input type="number" min="1" className={inputCls} value={beneficiaries} onChange={(e) => setBeneficiaries(e.target.value)} />
+              {salary > 0 && numBeneficiaries > 0 && (
+                <p className="text-xs text-slate-500 mt-1">
+                  {formatCurrency(salary / numBeneficiaries)}/person → {getMarginalRateLabel(salary / numBeneficiaries)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {structure === 'company' && (
+            <div className="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 space-y-1">
+              <p><strong>Company (Pty Ltd):</strong> 25% flat tax on profits. Losses carried forward — no negative gearing benefit.</p>
+              <p>No CGT 50% discount on property sale. Dividends can be franked. Generally not recommended for property holding vs. trust.</p>
+            </div>
+          )}
+          {structure === 'smsf' && (
+            <div className="sm:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 space-y-1">
+              <p><strong>SMSF:</strong> 15% tax on net rental income (accumulation). 0% in pension phase.</p>
+              <p>Must use Limited Recourse Borrowing Arrangement (LRBA). CGT: 10% after 12 months (accumulation), 0% pension phase.</p>
+            </div>
+          )}
+          {structure === 'trust' && (
+            <div className="sm:col-span-2 bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800 space-y-1">
+              <p><strong>Discretionary Trust:</strong> Trust losses cannot be distributed — carried forward internally.</p>
+              <p>Positive income split among beneficiaries at their marginal rates. 50% CGT discount passes to individual beneficiaries.</p>
+            </div>
+          )}
         </div>
+      </Card>
+
+      {/* Acquisition Costs */}
+      {purchasePrice > 0 && (
+        <Card title={`Acquisition Costs — ${state} (Investment Property)`}>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Purchase Price</span>
+              <span className="font-medium">{formatCurrency(purchasePrice)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Stamp Duty ({state})</span>
+              <span className="font-semibold text-orange-700">{formatCurrency(stampDuty)}</span>
+            </div>
+            {lmi > 0 && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">LMI — LVR {lvr.toFixed(0)}%</span>
+                <span className="font-semibold text-red-700">{formatCurrency(lmi)}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-slate-500">Conveyancing / Legal (est. 0.2%)</span>
+              <span className="font-medium">{formatCurrency(conveyancing)}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-200 pt-2">
+              <span className="font-semibold text-slate-800">Total Cash Required to Purchase</span>
+              <span className="font-bold text-slate-900">{formatCurrency(totalCashRequired)}</span>
+            </div>
+            <p className="text-xs text-slate-400">{formatCurrency(purchasePrice * (deposit / 100))} deposit + {formatCurrency(totalAcquisitionCosts)} costs</p>
+          </div>
+
+          {/* Annual ongoing */}
+          <div className="mt-4 pt-4 border-t border-slate-100 space-y-2 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Annual Ongoing Costs (for tax calc)</p>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Interest (IO equivalent)</span>
+              <span>{formatCurrency(annualInterest)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">PM / Agent Fees (~8% of rent)</span>
+              <span>{formatCurrency(annualMgmtFees)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Council Rates</span>
+              <span>{formatCurrency(annualCouncilRates)}</span>
+            </div>
+            {state === 'QLD' && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">QLD Land Tax (est. land {formatCurrency(estimatedLandValue)})</span>
+                <span className={annualLandTax > 0 ? 'font-semibold text-orange-700' : 'text-slate-400'}>
+                  {annualLandTax > 0 ? formatCurrency(annualLandTax) : `Below ${structure === 'individual' ? '$600k' : '$350k'} threshold`}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold">
+              <span>Net Rental Income for Tax</span>
+              <span className={netRentalForTax >= 0 ? 'text-green-700' : 'text-red-700'}>
+                {formatCurrency(netRentalForTax)}/yr
+                <span className="font-normal text-xs ml-1 text-slate-500">
+                  {netRentalForTax < 0 ? '(negatively geared)' : '(positively geared)'}
+                </span>
+              </span>
+            </div>
+          </div>
+        </Card>
       )}
 
-      <Button
-        onClick={getRecommendation}
-        loading={loading}
-        disabled={!purchasePrice || !weeklyRent}
-        size="md"
-        className="w-full sm:w-auto"
-      >
+      {/* Live Calculations */}
+      {hasCalcs && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Loan Amount', value: formatCurrency(loanAmount), neutral: true },
+              { label: 'Monthly Repayment (P&I)', value: formatCurrency(monthlyRepayment), neutral: true },
+              { label: 'Gross Yield', value: `${grossYield.toFixed(2)}%`, neutral: true },
+              { label: 'Pre-Tax Cashflow/mo', value: formatCurrency(monthlyCashflow), positive: monthlyCashflow >= 0 },
+            ].map((stat) => (
+              <div key={stat.label} className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
+                <p className="text-xs text-slate-500 mb-1">{stat.label}</p>
+                <p className={`text-base font-bold ${stat.neutral ? 'text-slate-900' : stat.positive ? 'text-green-700' : 'text-red-700'}`}>
+                  {stat.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* After-tax summary panel */}
+          <div className="bg-slate-800 rounded-xl p-4 text-white">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+              After-Tax Summary —{' '}
+              {structure === 'individual' ? 'Individual PAYG' : structure === 'trust' ? 'Discretionary Trust' : structure === 'company' ? 'Company 25%' : 'SMSF 15%'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Tax Rate</p>
+                <p className="text-sm font-semibold leading-tight">{taxRateLabel || `${(taxRate * 100).toFixed(0)}%`}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">{monthlyTaxBenefit >= 0 ? 'Monthly Tax Saving' : 'Monthly Tax Cost'}</p>
+                <p className={`text-lg font-bold ${monthlyTaxBenefit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {monthlyTaxBenefit !== 0 ? (monthlyTaxBenefit >= 0 ? '+' : '') + formatCurrency(monthlyTaxBenefit) + '/mo' : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">After-Tax Cashflow/mo</p>
+                <p className={`text-2xl font-bold ${afterTaxMonthlyCashflow >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {formatCurrency(afterTaxMonthlyCashflow)}
+                </p>
+              </div>
+            </div>
+            {taxNote && <p className="text-xs text-slate-400 mt-3 border-t border-slate-700 pt-2">{taxNote}</p>}
+            <p className="text-xs text-slate-500 mt-2">
+              * Deductions: interest (IO), PM fees ~8%, council rates{state === 'QLD' ? ', QLD land tax' : ''}. Estimate only — seek professional tax advice.
+            </p>
+          </div>
+        </>
+      )}
+
+      <Button onClick={getRecommendation} loading={loading} disabled={!purchasePrice || (!weeklyRent && !isLand)} size="md" className="w-full sm:w-auto">
         Get AI Recommendation
       </Button>
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       {loading && (
         <div className="flex flex-col items-center gap-3 py-8 text-slate-500 text-sm">
@@ -441,24 +751,14 @@ function PredictorTab() {
 
       {result && !loading && (
         <div className="space-y-4">
-          {/* Recommendation banner */}
-          <div
-            className={`rounded-xl border-2 p-5 flex flex-col sm:flex-row items-center gap-4 ${
-              result.recommendation === 'buy'
-                ? 'bg-green-50 border-green-300'
-                : result.recommendation === 'consider'
-                ? 'bg-amber-50 border-amber-300'
-                : 'bg-red-50 border-red-300'
-            }`}
-          >
+          <div className={`rounded-xl border-2 p-5 flex flex-col sm:flex-row items-center gap-4 ${
+            result.recommendation === 'buy' ? 'bg-green-50 border-green-300'
+            : result.recommendation === 'consider' ? 'bg-amber-50 border-amber-300'
+            : 'bg-red-50 border-red-300'
+          }`}>
             <div className="flex-1 text-center sm:text-left">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                AI Recommendation
-              </p>
-              <Badge
-                variant={recommendationVariant(result.recommendation)}
-                className="text-base px-4 py-1 uppercase"
-              >
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">AI Recommendation</p>
+              <Badge variant={recommendationVariant(result.recommendation)} className="text-base px-4 py-1 uppercase">
                 {result.recommendation}
               </Badge>
             </div>
@@ -468,32 +768,27 @@ function PredictorTab() {
             </div>
           </div>
 
-          {/* Pros & Cons */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Card title="Pros">
               <ul className="space-y-2">
                 {result.pros.map((pro, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                    <span className="shrink-0 text-green-600 font-bold mt-0.5">✓</span>
-                    {pro}
+                    <span className="shrink-0 text-green-600 font-bold mt-0.5">✓</span>{pro}
                   </li>
                 ))}
               </ul>
             </Card>
-
             <Card title="Cons">
               <ul className="space-y-2">
                 {result.cons.map((con, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                    <span className="shrink-0 text-red-500 font-bold mt-0.5">✗</span>
-                    {con}
+                    <span className="shrink-0 text-red-500 font-bold mt-0.5">✗</span>{con}
                   </li>
                 ))}
               </ul>
             </Card>
           </div>
 
-          {/* Summary */}
           <Card title="AI Summary">
             <p className="text-sm text-slate-700 leading-relaxed">{result.ai_summary}</p>
           </Card>

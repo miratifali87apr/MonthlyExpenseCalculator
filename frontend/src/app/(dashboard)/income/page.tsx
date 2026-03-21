@@ -126,12 +126,112 @@ function AddIncomeModal({ onClose, onSaved, properties }: { onClose: () => void;
   );
 }
 
+// ─── Edit Income Modal ─────────────────────────────────────────────────────────
+
+function EditIncomeModal({ item, onClose, onSaved, properties }: { item: IncomeItem; onClose: () => void; onSaved: () => void; properties: Property[] }) {
+  const [form, setForm] = useState({
+    name: item.name,
+    type: item.type,
+    amount: String(item.amount),
+    frequency: item.frequency ?? 'monthly',
+    is_recurring: item.is_recurring,
+    property_id: item.property_id ? String(item.property_id) : '',
+    notes: item.notes ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function update(field: string, value: string | boolean) { setForm(f => ({ ...f, [field]: value })); }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.amount) { setError('Name and amount are required.'); return; }
+    setSaving(true); setError('');
+    try {
+      await incomeApi.update(item.id, {
+        name: form.name.trim(),
+        type: form.type as IncomeType,
+        amount: parseFloat(form.amount),
+        frequency: form.is_recurring ? form.frequency as Frequency : undefined,
+        is_recurring: form.is_recurring,
+        property_id: form.property_id ? parseInt(form.property_id) : undefined,
+        notes: form.notes.trim() || undefined,
+      });
+      onSaved(); onClose();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to save.'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h2 className="font-bold text-slate-900">Edit Income</h2>
+          <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
+            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.name} onChange={e => update('name', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
+              <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.type} onChange={e => update('type', e.target.value)}>
+                <option value="salary">Salary</option>
+                <option value="rental">Rental</option>
+                <option value="reimbursement">Reimbursement</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($) *</label>
+              <input type="number" step="0.01" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.amount} onChange={e => update('amount', e.target.value)} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="rounded" checked={form.is_recurring} onChange={e => update('is_recurring', e.target.checked)} />
+            <span className="text-sm text-slate-700">Recurring income</span>
+          </label>
+          {form.is_recurring && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Frequency</label>
+              <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.frequency} onChange={e => update('frequency', e.target.value)}>
+                <option value="weekly">Weekly</option>
+                <option value="fortnightly">Fortnightly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Property</label>
+            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.property_id} onChange={e => update('property_id', e.target.value)}>
+              <option value="">No property (personal)</option>
+              {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
+            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="Optional" value={form.notes} onChange={e => update('notes', e.target.value)} />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>Save Changes</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function IncomePage() {
   const queryClient = useQueryClient();
   const [actionId, setActionId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [editItem, setEditItem] = useState<IncomeItem | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['income'],
@@ -169,6 +269,14 @@ export default function IncomePage() {
           properties={properties}
           onClose={() => setShowAdd(false)}
           onSaved={() => queryClient.invalidateQueries({ queryKey: ['income'] })}
+        />
+      )}
+      {editItem && (
+        <EditIncomeModal
+          item={editItem}
+          properties={properties}
+          onClose={() => setEditItem(null)}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey: ['income'] }); }}
         />
       )}
 
@@ -213,6 +321,7 @@ export default function IncomePage() {
                         Received
                       </Button>
                     )}
+                    <Button variant="ghost" size="sm" onClick={() => setEditItem(item)}>Edit</Button>
                     <Button variant="danger" size="sm" loading={actionId === item.id} onClick={() => handleDelete(item.id)}>Delete</Button>
                   </div>
                 </div>
@@ -269,6 +378,7 @@ export default function IncomePage() {
                               Mark Received
                             </Button>
                           )}
+                          <Button variant="ghost" size="sm" onClick={() => setEditItem(item)}>Edit</Button>
                           <Button variant="danger" size="sm" loading={actionId === item.id} onClick={() => handleDelete(item.id)}>
                             Delete
                           </Button>
