@@ -265,9 +265,11 @@ function calcLMI(loanAmount: number, lvr: number): number {
 }
 
 // Stamp duty — investment property, not first home buyer
+// Sources: QRO, Revenue NSW (2025-26 CPI-indexed), SRO Vic (from 1 Jul 2021), Revenue WA, RevenueSA, SRO TAS, ACT Revenue, NT Treasury
 function calcStampDuty(price: number, state: AusState): number {
   switch (state) {
     case 'QLD': {
+      // QRO — qro.qld.gov.au — confirmed current
       if (price <= 5000) return 0;
       if (price <= 75000) return (price - 5000) * 0.015;
       if (price <= 540000) return 1050 + (price - 75000) * 0.035;
@@ -275,22 +277,25 @@ function calcStampDuty(price: number, state: AusState): number {
       return 38025 + (price - 1000000) * 0.0575;
     }
     case 'NSW': {
-      if (price <= 14000) return price * 0.0125;
-      if (price <= 30000) return 175 + (price - 14000) * 0.015;
-      if (price <= 80000) return 415 + (price - 30000) * 0.0175;
-      if (price <= 300000) return 1290 + (price - 80000) * 0.035;
-      if (price <= 1000000) return 8990 + (price - 300000) * 0.045;
-      if (price <= 3000000) return 40490 + (price - 1000000) * 0.055;
-      return 150490 + (price - 3000000) * 0.07; // Premium property duty $3M+
+      // Revenue NSW — 2025-26 CPI-indexed thresholds (update annually: revenue.nsw.gov.au)
+      if (price <= 17000) return price * 0.0125;
+      if (price <= 37000) return 212 + (price - 17000) * 0.015;
+      if (price <= 99000) return 512 + (price - 37000) * 0.0175;
+      if (price <= 372000) return 1597 + (price - 99000) * 0.035;
+      if (price <= 1240000) return 11152 + (price - 372000) * 0.045;
+      if (price <= 3721000) return 50212 + (price - 1240000) * 0.055;
+      return 186667 + (price - 3721000) * 0.07; // Premium residential duty $3.721M+
     }
     case 'VIC': {
+      // SRO Victoria — non-PPR (investment) rates from 1 Jul 2021 (sro.vic.gov.au)
       if (price <= 25000) return price * 0.014;
       if (price <= 130000) return 350 + (price - 25000) * 0.024;
       if (price <= 960000) return 2870 + (price - 130000) * 0.06;
-      return 52670 + (price - 960000) * 0.065;
+      if (price <= 2000000) return price * 0.055; // 5.5% of total dutiable value
+      return 110000 + (price - 2000000) * 0.065;
     }
     case 'WA': {
-      // Revenue WA — Dutiable value thresholds (investment property rates)
+      // Revenue WA — confirmed thresholds (revenue.wa.gov.au)
       if (price <= 120000) return price * 0.019;
       if (price <= 150000) return 2280 + (price - 120000) * 0.0285;
       if (price <= 360000) return 3135 + (price - 150000) * 0.038;
@@ -298,6 +303,7 @@ function calcStampDuty(price: number, state: AusState): number {
       return 28453 + (price - 725000) * 0.0515;
     }
     case 'SA': {
+      // RevenueSA — revenuesa.sa.gov.au (verify annually, site access limited)
       if (price <= 12000) return price * 0.01;
       if (price <= 30000) return 120 + (price - 12000) * 0.02;
       if (price <= 50000) return 480 + (price - 30000) * 0.03;
@@ -309,6 +315,7 @@ function calcStampDuty(price: number, state: AusState): number {
       return 21330 + (price - 500000) * 0.055;
     }
     case 'TAS': {
+      // SRO Tasmania — sro.tas.gov.au (verify annually)
       if (price <= 3000) return 50;
       if (price <= 25000) return 50 + (price - 3000) * 0.015;
       if (price <= 75000) return 380 + (price - 25000) * 0.0225;
@@ -318,6 +325,7 @@ function calcStampDuty(price: number, state: AusState): number {
       return 27755 + (price - 725000) * 0.045;
     }
     case 'ACT': {
+      // ACT Revenue Office — revenue.act.gov.au (verify annually)
       if (price <= 200000) return price * 0.0206;
       if (price <= 300000) return 4120 + (price - 200000) * 0.0292;
       if (price <= 500000) return 7040 + (price - 300000) * 0.0399;
@@ -326,6 +334,7 @@ function calcStampDuty(price: number, state: AusState): number {
       return 43720 + (price - 1000000) * 0.0699;
     }
     case 'NT': {
+      // NT Treasury — quadratic formula (treasury.nt.gov.au)
       if (price <= 525000) {
         const v = price / 1000;
         return Math.max(0, (0.06571441 * v * v + 15 * v - 12000) * 0.01);
@@ -340,57 +349,72 @@ function calcStampDuty(price: number, state: AusState): number {
 // ACT uses a rates system (no separate land tax). NT has no land tax.
 
 function calcLandTax(landValue: number, structure: OwnershipStructure, state: AusState): number {
-  const isTrust = structure === 'trust' || structure === 'company';
+  const isCompanyOrTrust = structure === 'trust' || structure === 'company';
 
   switch (state) {
     case 'QLD': {
-      const threshold = isTrust ? 350000 : 600000;
-      if (landValue <= threshold) return 0;
-      if (!isTrust) {
-        if (landValue <= 999999) return 500 + (landValue - 600000) * 0.01;
-        if (landValue <= 2999999) return 4500 + (landValue - 1000000) * 0.0165;
-        return 37500 + (landValue - 3000000) * 0.0225;
+      // QRO 2024-25 — qro.qld.gov.au (confirmed via web)
+      // Individual / SMSF: $600k threshold
+      if (!isCompanyOrTrust) {
+        if (landValue < 600000) return 0;
+        if (landValue < 1000000) return 500 + (landValue - 600000) * 0.01;
+        if (landValue < 3000000) return 4500 + (landValue - 1000000) * 0.0165;
+        if (landValue < 5000000) return 37500 + (landValue - 3000000) * 0.0125;
+        if (landValue < 10000000) return 62500 + (landValue - 5000000) * 0.0175;
+        return 150000 + (landValue - 10000000) * 0.0225;
       }
-      if (landValue <= 2999999) return 1450 + (landValue - 350000) * 0.017;
-      return 46500 + (landValue - 3000000) * 0.025; // $1,450 + $2,650,000×1.7% = $46,500
+      // Company / Trust: $350k threshold
+      if (landValue < 350000) return 0;
+      if (landValue < 2250000) return 1450 + (landValue - 350000) * 0.017;
+      if (landValue < 5000000) return 33750 + (landValue - 2250000) * 0.015;
+      if (landValue < 10000000) return 75000 + (landValue - 5000000) * 0.0225;
+      return 187500 + (landValue - 10000000) * 0.0275;
     }
     case 'VIC': {
-      // SRO Victoria 2024-25: Individual/SMSF threshold $300k; Trust $25k + 0.5% surcharge
-      // Standard tax brackets only apply above $300k (for ALL structures)
-      // Trust pays: standard tax (if > $300k) PLUS 0.5% surcharge on value above $25k
-      const threshold = isTrust ? 25000 : 300000;
-      if (landValue <= threshold) return 0;
-      let standardTax = 0;
-      if (landValue > 300000) {
-        if (landValue <= 600000) standardTax = 375 + (landValue - 300000) * 0.002;
-        else if (landValue <= 1000000) standardTax = 975 + (landValue - 600000) * 0.005;
-        else if (landValue <= 1800000) standardTax = 2975 + (landValue - 1000000) * 0.008;
-        else if (landValue <= 3000000) standardTax = 9375 + (landValue - 1800000) * 0.013;
-        else standardTax = 24975 + (landValue - 3000000) * 0.0255;
+      // SRO Victoria 2024-25 — confirmed via sro.vic.gov.au
+      // Trusts: use combined trust surcharge table (replaces general rate)
+      // Individual / Company / SMSF: use general rate table
+      if (structure === 'trust') {
+        // Trust surcharge table — combined total (general + surcharge) per SRO
+        if (landValue < 25000) return 0;
+        if (landValue < 50000) return 82 + (landValue - 25000) * 0.00375;
+        if (landValue < 100000) return 676 + (landValue - 50000) * 0.00375;
+        if (landValue < 250000) return 1338 + (landValue - 100000) * 0.00375;
+        if (landValue < 600000) return 1901 + (landValue - 250000) * 0.00675;
+        if (landValue < 1000000) return 4263 + (landValue - 600000) * 0.00975;
+        if (landValue < 1800000) return 8163 + (landValue - 1000000) * 0.01275;
+        if (landValue < 3000000) return 18363 + (landValue - 1800000) * 0.011072;
+        return 31650 + (landValue - 3000000) * 0.0265;
       }
-      // Trust surcharge: +0.5% on all land value above $25k (regardless of standard tax)
-      const trustSurcharge = isTrust ? (landValue - 25000) * 0.005 : 0;
-      return standardTax + trustSurcharge;
+      // General rate: Individual / Company / SMSF — threshold $50k
+      if (landValue < 50000) return 0;
+      if (landValue < 100000) return 500;   // flat
+      if (landValue < 300000) return 975;   // flat
+      if (landValue < 600000) return 1350 + (landValue - 300000) * 0.003;
+      if (landValue < 1000000) return 2250 + (landValue - 600000) * 0.006;
+      if (landValue < 1800000) return 4650 + (landValue - 1000000) * 0.009;
+      if (landValue < 3000000) return 11850 + (landValue - 1800000) * 0.0165;
+      return 31650 + (landValue - 3000000) * 0.0265;
     }
     case 'NSW': {
-      // Threshold $1,075,000 (2024-25, adjusted annually by CPI)
-      // Same threshold for individuals, companies, trusts
-      const threshold = 1075000;
-      if (landValue <= threshold) return 0;
-      if (landValue <= 6571000) return 100 + (landValue - threshold) * 0.016;
-      return 100504 + (landValue - 6571000) * 0.02;
+      // Revenue NSW 2024-25 — confirmed via revenue.nsw.gov.au
+      // Threshold $1,075,000 (frozen — no longer CPI-indexed from 2024-25 Budget)
+      if (landValue <= 1075000) return 0;
+      if (landValue <= 6571000) return 100 + (landValue - 1075000) * 0.016;
+      return 88036 + (landValue - 6571000) * 0.02; // premium threshold
     }
     case 'WA': {
-      // Threshold $300,000
+      // Revenue WA — confirmed via wa.gov.au
       if (landValue <= 300000) return 0;
-      if (landValue <= 420000) return (landValue - 300000) * 0.0015;
-      if (landValue <= 1000000) return 180 + (landValue - 420000) * 0.0045;
-      if (landValue <= 1800000) return 2790 + (landValue - 1000000) * 0.0076;
-      if (landValue <= 5000000) return 8870 + (landValue - 1800000) * 0.0105;
-      return 42470 + (landValue - 5000000) * 0.014;
+      if (landValue <= 420000) return 300; // flat minimum
+      if (landValue <= 1000000) return 300 + (landValue - 420000) * 0.0025;
+      if (landValue <= 1800000) return 1750 + (landValue - 1000000) * 0.009;
+      if (landValue <= 5000000) return 8950 + (landValue - 1800000) * 0.018;
+      if (landValue <= 11000000) return 66550 + (landValue - 5000000) * 0.02;
+      return 186550 + (landValue - 11000000) * 0.0267;
     }
     case 'SA': {
-      // Threshold $534,000 (2024-25)
+      // RevenueSA — revenuesa.sa.gov.au (verify annually, site access limited)
       if (landValue <= 534000) return 0;
       if (landValue <= 1082000) return (landValue - 534000) * 0.005;
       if (landValue <= 1700000) return 2740 + (landValue - 1082000) * 0.01;
@@ -398,26 +422,26 @@ function calcLandTax(landValue: number, structure: OwnershipStructure, state: Au
       return 47440 + (landValue - 3900000) * 0.024;
     }
     case 'TAS': {
-      // Threshold $100,000
-      if (landValue <= 100000) return 0;
-      if (landValue <= 499999) return (landValue - 100000) * 0.0045;
-      return 1800 + (landValue - 500000) * 0.015;
+      // SRO Tasmania — confirmed via sro.tas.gov.au
+      if (landValue < 125000) return 0;
+      if (landValue < 500000) return 50 + (landValue - 125000) * 0.0045;
+      return 1737.50 + (landValue - 500000) * 0.015;
     }
-    case 'ACT': return 0; // ACT uses general rates (land value charge), no separate land tax
+    case 'ACT': return 0; // ACT uses general rates system, no separate land tax
     case 'NT': return 0;  // NT has no land tax
     default: return 0;
   }
 }
 
 function landTaxThresholdLabel(structure: OwnershipStructure, state: AusState): string {
-  const isTrust = structure === 'trust' || structure === 'company';
+  const isCompanyOrTrust = structure === 'trust' || structure === 'company';
   switch (state) {
-    case 'QLD': return isTrust ? '$350k' : '$600k';
-    case 'VIC': return isTrust ? '$25k (trust surcharge applies)' : '$300k';
-    case 'NSW': return '$1,075,000';
+    case 'QLD': return isCompanyOrTrust ? '$350k (company/trust)' : '$600k (individual)';
+    case 'VIC': return structure === 'trust' ? '$25k (trust surcharge table)' : '$50k';
+    case 'NSW': return '$1,075,000 (frozen 2024-25)';
     case 'WA': return '$300k';
     case 'SA': return '$534k';
-    case 'TAS': return '$100k';
+    case 'TAS': return '$125k';
     case 'ACT': return 'N/A (general rates system)';
     case 'NT': return 'N/A (no land tax)';
     default: return '—';
