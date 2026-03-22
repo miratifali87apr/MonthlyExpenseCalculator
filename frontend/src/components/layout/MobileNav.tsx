@@ -2,19 +2,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CreditCard, TrendingUp, Home, RefreshCw, Sparkles } from 'lucide-react';
+import { LayoutDashboard, CreditCard, TrendingUp, Home, RefreshCw, Sparkles, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/dashboard',  label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard',  label: 'Home',      icon: LayoutDashboard },
   { href: '/expenses',   label: 'Expenses',  icon: CreditCard },
   { href: '/income',     label: 'Income',    icon: TrendingUp },
-  { href: '/properties', label: 'Properties',icon: Home },
+  { href: '/properties', label: 'Property',  icon: Home },
   { href: '/recurring',  label: 'Recurring', icon: RefreshCw },
   { href: '/insights',   label: 'AI',        icon: Sparkles },
 ];
 
-export function MobileNav() {
+interface MobileNavProps {
+  onLogout: () => void;
+}
+
+export function MobileNav({ onLogout }: MobileNavProps) {
   const pathname = usePathname();
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 border-t border-slate-800 flex md:hidden">
@@ -29,11 +33,18 @@ export function MobileNav() {
               isActive ? 'text-white' : 'text-slate-500'
             )}
           >
-            <Icon size={20} className={isActive ? 'text-white' : 'text-slate-500'} />
+            <Icon size={18} className={isActive ? 'text-white' : 'text-slate-500'} />
             {label}
           </Link>
         );
       })}
+      <button
+        onClick={onLogout}
+        className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium text-slate-500 hover:text-red-400 transition-colors"
+      >
+        <LogOut size={18} />
+        Logout
+      </button>
     </nav>
   );
 }
