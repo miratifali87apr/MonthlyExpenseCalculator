@@ -113,17 +113,8 @@ def generate_from_templates(
     now = datetime.now(timezone.utc)
     today = now.date()
 
-    if month is None or year is None:
-        next_month = today.month + 1
-        next_year = today.year
-        if next_month > 12:
-            next_month = 1
-            next_year += 1
-        target_month = month if month is not None else next_month
-        target_year = year if year is not None else next_year
-    else:
-        target_month = month
-        target_year = year
+    target_month = month if month is not None else today.month
+    target_year = year if year is not None else today.year
 
     active_templates = (
         db.query(models.RecurringTemplate)

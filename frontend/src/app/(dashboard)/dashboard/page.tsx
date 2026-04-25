@@ -1,13 +1,14 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { DashboardSkeleton } from '@/components/ui/Skeleton';
-import { dashboardApi, expensesApi } from '@/lib/api';
+import { dashboardApi, expensesApi, recurringApi } from '@/lib/api';
 import { formatCurrency, formatDate, formatMonth } from '@/lib/utils';
 import type { ExpenseItem, IncomeItem } from '@/types';
 import Link from 'next/link';
@@ -19,6 +20,31 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [payingId, setPayingId] = useState<number | null>(null);
   const [fundingId, setFundingId] = useState<number | null>(null);
+  const hasGenerated = useRef(false);
+
+  // Auto-generate recurring bills for current + next month on every dashboard visit
+  useEffect(() => {
+    if (hasGenerated.current) return;
+    hasGenerated.current = true;
+
+    const now = new Date();
+    const thisMonth = now.getMonth() + 1;
+    const thisYear = now.getFullYear();
+    const nextMonth = thisMonth === 12 ? 1 : thisMonth + 1;
+    const nextYear = thisMonth === 12 ? thisYear + 1 : thisYear;
+
+    Promise.all([
+      recurringApi.generate(thisMonth, thisYear),
+      recurringApi.generate(nextMonth, nextYear),
+    ]).then(([curr, next]) => {
+      const total = (curr.generated ?? 0) + (next.generated ?? 0);
+      if (total > 0) {
+        toast.success(`${total} bill${total > 1 ? 's' : ''} auto-generated for ${total > 0 ? 'this/next' : 'this'} month`);
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      }
+    }).catch(() => {/* silent fail */});
+  }, [queryClient]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard'],
