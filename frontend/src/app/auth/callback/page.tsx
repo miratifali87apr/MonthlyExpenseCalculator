@@ -16,23 +16,45 @@ function AuthCallbackInner() {
 
   useEffect(() => {
     const code = searchParams.get('code');
-    const type = searchParams.get('type'); // 'recovery' for password reset emails
+    const type = searchParams.get('type');
+    const errorParam = searchParams.get('error');
+    const redirectTo = type === 'recovery' ? '/auth/reset-password' : '/dashboard';
+
+    if (errorParam) {
+      router.replace('/login?error=callback_failed');
+      return;
+    }
 
     if (code) {
+      // PKCE flow — exchange code for session
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         if (error) {
           router.replace('/login?error=callback_failed');
-          return;
-        }
-        if (type === 'recovery') {
-          router.replace('/auth/reset-password');
         } else {
-          router.replace('/dashboard');
+          router.replace(redirectTo);
         }
       });
-    } else {
-      router.replace('/login');
+      return;
     }
+
+    // Implicit flow — Supabase processes the hash fragment automatically.
+    // Listen for auth state change and redirect once session is confirmed.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        subscription.unsubscribe();
+        router.replace(redirectTo);
+      } else if (event === 'INITIAL_SESSION') {
+        if (session) {
+          subscription.unsubscribe();
+          router.replace(redirectTo);
+        } else {
+          subscription.unsubscribe();
+          router.replace('/login');
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [router, searchParams]);
 
   return <Spinner />;
