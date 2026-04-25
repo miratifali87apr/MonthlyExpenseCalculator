@@ -15,7 +15,6 @@ function AuthCallbackInner() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const code = searchParams.get('code');
     const type = searchParams.get('type');
     const errorParam = searchParams.get('error');
     const redirectTo = type === 'recovery' ? '/auth/reset-password' : '/dashboard';
@@ -25,30 +24,17 @@ function AuthCallbackInner() {
       return;
     }
 
-    if (code) {
-      // PKCE flow — exchange code for session
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (error) {
-          router.replace('/login?error=callback_failed');
-        } else {
-          router.replace(redirectTo);
-        }
-      });
-      return;
-    }
-
-    // Implicit flow — Supabase processes the hash fragment automatically.
-    // Listen for auth state change and redirect once session is confirmed.
+    // Supabase client auto-detects ?code= and #access_token= in the URL
+    // and processes them internally. Just wait for the auth state to resolve.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         subscription.unsubscribe();
         router.replace(redirectTo);
       } else if (event === 'INITIAL_SESSION') {
+        subscription.unsubscribe();
         if (session) {
-          subscription.unsubscribe();
           router.replace(redirectTo);
         } else {
-          subscription.unsubscribe();
           router.replace('/login');
         }
       }
