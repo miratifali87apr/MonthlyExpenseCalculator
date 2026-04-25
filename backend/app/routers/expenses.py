@@ -1,4 +1,5 @@
-from datetime import datetime, timezone, date
+import calendar
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -22,7 +23,6 @@ def _resolve_status(expense: models.ExpenseItem) -> str:
     if expense.status == "pending":
         now = datetime.now(timezone.utc)
         due = expense.due_date
-        # Ensure timezone-aware comparison
         if due.tzinfo is None:
             due = due.replace(tzinfo=timezone.utc)
         if due < now:
@@ -40,13 +40,10 @@ def list_expenses(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.ExpenseItem)
+    query = db.query(models.ExpenseItem).filter(models.ExpenseItem.user_id == current_user.id)
 
     if month is not None and year is not None:
-        query = query.filter(
-            models.ExpenseItem.due_date != None,  # noqa: E711
-        )
-        # Filter by year+month via Python after fetching (SQLAlchemy cross-DB safe approach)
+        query = query.filter(models.ExpenseItem.due_date != None)  # noqa: E711
         items = query.order_by(models.ExpenseItem.due_date.desc()).all()
         items = [
             i for i in items
@@ -64,7 +61,6 @@ def list_expenses(
             query = query.filter(models.ExpenseItem.category == category)
         items = query.order_by(models.ExpenseItem.due_date.desc()).all()
 
-    # Apply additional filters if month was used
     if month is not None or year is not None:
         if property_id is not None:
             items = [i for i in items if i.property_id == property_id]
@@ -82,9 +78,8 @@ def create_expense(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    expense = models.ExpenseItem(**data.model_dump())
+    expense = models.ExpenseItem(**data.model_dump(), user_id=current_user.id)
 
-    # Auto-set overdue if due_date is in the past and status is pending
     now = datetime.now(timezone.utc)
     due = expense.due_date
     if due.tzinfo is None:
@@ -105,7 +100,11 @@ def update_expense(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    expense = db.query(models.ExpenseItem).filter(models.ExpenseItem.id == expense_id).first()
+    expense = (
+        db.query(models.ExpenseItem)
+        .filter(models.ExpenseItem.id == expense_id, models.ExpenseItem.user_id == current_user.id)
+        .first()
+    )
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
@@ -113,7 +112,6 @@ def update_expense(
     for field, value in update_data.items():
         setattr(expense, field, value)
 
-    # Re-check overdue status
     new_status = _resolve_status(expense)
     if expense.status != "paid":
         expense.status = new_status
@@ -129,7 +127,11 @@ def delete_expense(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    expense = db.query(models.ExpenseItem).filter(models.ExpenseItem.id == expense_id).first()
+    expense = (
+        db.query(models.ExpenseItem)
+        .filter(models.ExpenseItem.id == expense_id, models.ExpenseItem.user_id == current_user.id)
+        .first()
+    )
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
     db.delete(expense)
@@ -143,7 +145,11 @@ def mark_paid(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    expense = db.query(models.ExpenseItem).filter(models.ExpenseItem.id == expense_id).first()
+    expense = (
+        db.query(models.ExpenseItem)
+        .filter(models.ExpenseItem.id == expense_id, models.ExpenseItem.user_id == current_user.id)
+        .first()
+    )
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
@@ -160,7 +166,11 @@ def mark_funded(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    expense = db.query(models.ExpenseItem).filter(models.ExpenseItem.id == expense_id).first()
+    expense = (
+        db.query(models.ExpenseItem)
+        .filter(models.ExpenseItem.id == expense_id, models.ExpenseItem.user_id == current_user.id)
+        .first()
+    )
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
     expense.status = "funded"
@@ -176,7 +186,11 @@ def partial_pay(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    expense = db.query(models.ExpenseItem).filter(models.ExpenseItem.id == expense_id).first()
+    expense = (
+        db.query(models.ExpenseItem)
+        .filter(models.ExpenseItem.id == expense_id, models.ExpenseItem.user_id == current_user.id)
+        .first()
+    )
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
@@ -203,7 +217,11 @@ def mark_unpaid(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    expense = db.query(models.ExpenseItem).filter(models.ExpenseItem.id == expense_id).first()
+    expense = (
+        db.query(models.ExpenseItem)
+        .filter(models.ExpenseItem.id == expense_id, models.ExpenseItem.user_id == current_user.id)
+        .first()
+    )
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
@@ -222,6 +240,7 @@ def generate_upcoming_expenses(
     """
     Generate expense items from active recurring templates for the next 3 months.
     Skips months that already have an expense item for that template.
+    Only generates for the current user's templates.
     """
     now = datetime.now(timezone.utc)
     today = now.date()
@@ -229,7 +248,10 @@ def generate_upcoming_expenses(
 
     active_templates = (
         db.query(models.RecurringTemplate)
-        .filter(models.RecurringTemplate.is_active == True)
+        .filter(
+            models.RecurringTemplate.user_id == current_user.id,
+            models.RecurringTemplate.is_active == True,
+        )
         .all()
     )
 
@@ -237,25 +259,32 @@ def generate_upcoming_expenses(
         day = template.day_of_month or 1
 
         for month_offset in range(0, 3):
-            # Calculate target year/month
+            # Yearly templates only fire in their designated month
+            if template.frequency == "yearly":
+                target_month_check = today.month + month_offset
+                target_year_check = today.year
+                while target_month_check > 12:
+                    target_month_check -= 12
+                    target_year_check += 1
+                desired_month = template.month_of_year or 1
+                if target_month_check != desired_month:
+                    continue
             target_month = today.month + month_offset
             target_year = today.year
             while target_month > 12:
                 target_month -= 12
                 target_year += 1
 
-            # Clamp day to valid range for that month
-            import calendar
             max_day = calendar.monthrange(target_year, target_month)[1]
             clamped_day = min(day, max_day)
 
             due_dt = datetime(target_year, target_month, clamped_day, tzinfo=timezone.utc)
 
-            # Check if expense item already exists for this template + year + month
             existing = (
                 db.query(models.ExpenseItem)
                 .filter(
                     models.ExpenseItem.template_id == template.id,
+                    models.ExpenseItem.user_id == current_user.id,
                     models.ExpenseItem.is_recurring == True,
                 )
                 .all()
@@ -281,6 +310,7 @@ def generate_upcoming_expenses(
                 template_id=template.id,
                 is_recurring=True,
                 notes=template.notes,
+                user_id=current_user.id,
             )
             db.add(expense)
             generated_count += 1

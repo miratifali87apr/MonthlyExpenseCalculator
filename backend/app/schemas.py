@@ -54,6 +54,7 @@ class RecurringTemplateBase(BaseModel):
     amount: float
     frequency: str = "monthly"
     day_of_month: Optional[int] = None
+    month_of_year: Optional[int] = None  # 1-12, only used when frequency='yearly'
     property_id: Optional[int] = None
     notes: Optional[str] = None
     is_active: bool = True
@@ -69,6 +70,7 @@ class RecurringTemplateUpdate(BaseModel):
     amount: Optional[float] = None
     frequency: Optional[str] = None
     day_of_month: Optional[int] = None
+    month_of_year: Optional[int] = None
     property_id: Optional[int] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None

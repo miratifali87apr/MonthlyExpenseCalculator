@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { PageSpinner } from '@/components/ui/Spinner';
+import { TableSkeleton } from '@/components/ui/Skeleton';
 import { expensesApi } from '@/lib/api';
 import {
   formatCurrency,
@@ -17,7 +17,8 @@ import {
 } from '@/lib/utils';
 import { ExpenseItem, Category, PaymentStatus } from '@/types';
 import dayjs from 'dayjs';
-import { ChevronUp, ChevronDown, ChevronsUpDown, Plus, X } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, Plus, X, Download, Trash2, CheckSquare } from 'lucide-react';
+import { toast } from 'sonner';
 import { propertiesApi } from '@/lib/api';
 import type { Property } from '@/types';
 
@@ -180,6 +181,30 @@ function PartialPayModal({ expense, onClose, onSaved }: { expense: ExpenseItem; 
   );
 }
 
+function exportToCSV(items: ExpenseItem[], month: number, year: number) {
+  const headers = ['Name', 'Category', 'Amount', 'Amount Paid', 'Due Date', 'Status', 'Property', 'Notes'];
+  const rows = items.map(e => [
+    e.name,
+    CATEGORY_LABELS[e.category] ?? e.category,
+    e.amount.toFixed(2),
+    (e.amount_paid ?? 0).toFixed(2),
+    formatDate(e.due_date),
+    e.status,
+    e.property?.name ?? '',
+    e.notes ?? '',
+  ]);
+  const csv = [headers, ...rows]
+    .map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `expenses-${year}-${String(month).padStart(2, '0')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ExpensesPage() {
   const now = dayjs();
   const [month, setMonth] = useState<number>(now.month() + 1);
@@ -191,6 +216,8 @@ export default function ExpensesPage() {
   const [partialPayExpense, setPartialPayExpense] = useState<ExpenseItem | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('due_date');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -228,6 +255,9 @@ export default function ExpensesPage() {
     try {
       await expensesApi.pay(id);
       await invalidate();
+      toast.success('Marked as paid');
+    } catch {
+      toast.error('Failed to mark as paid');
     } finally {
       setActionId(null);
     }
@@ -239,10 +269,58 @@ export default function ExpensesPage() {
     try {
       await expensesApi.delete(id);
       await invalidate();
+      toast.success('Expense deleted');
+    } catch {
+      toast.error('Failed to delete expense');
     } finally {
       setActionId(null);
     }
   };
+
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === sorted.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sorted.map(e => e.id)));
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!confirm(`Delete ${selectedIds.size} expense${selectedIds.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setBulkLoading(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => expensesApi.delete(id)));
+      await invalidate();
+      toast.success(`${selectedIds.size} expense${selectedIds.size > 1 ? 's' : ''} deleted`);
+      setSelectedIds(new Set());
+    } catch {
+      toast.error('Failed to delete some expenses');
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function handleBulkPay() {
+    setBulkLoading(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => expensesApi.pay(id)));
+      await invalidate();
+      toast.success(`${selectedIds.size} expense${selectedIds.size > 1 ? 's' : ''} marked as paid`);
+      setSelectedIds(new Set());
+    } catch {
+      toast.error('Failed to mark some expenses as paid');
+    } finally {
+      setBulkLoading(false);
+    }
+  }
 
   const sorted: ExpenseItem[] = [...(data ?? [])].sort((a, b) => {
     let cmp = 0;
@@ -280,21 +358,32 @@ export default function ExpensesPage() {
         <AddExpenseModal
           properties={properties}
           onClose={() => setShowAdd(false)}
-          onSaved={() => queryClient.invalidateQueries({ queryKey })}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey }); toast.success('Expense added'); }}
         />
       )}
       {partialPayExpense && (
         <PartialPayModal
           expense={partialPayExpense}
           onClose={() => setPartialPayExpense(null)}
-          onSaved={() => { queryClient.invalidateQueries({ queryKey }); }}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey }); toast.success('Payment recorded'); }}
         />
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-slate-900">Expenses</h1>
-        <Button size="sm" onClick={() => setShowAdd(true)}>
-          <Plus size={15} className="mr-1" /> Add
-        </Button>
+        <div className="flex items-center gap-2">
+          {sorted.length > 0 && (
+            <button
+              onClick={() => exportToCSV(sorted, month, year)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              title="Export to CSV"
+            >
+              <Download size={13} /> Export
+            </button>
+          )}
+          <Button size="sm" onClick={() => setShowAdd(true)}>
+            <Plus size={15} className="mr-1" /> Add
+          </Button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -335,7 +424,7 @@ export default function ExpensesPage() {
       {/* List */}
       <Card>
         {isLoading ? (
-          <PageSpinner />
+          <TableSkeleton rows={7} cols={7} />
         ) : error ? (
           <p className="text-sm text-red-600">Failed to load expenses.</p>
         ) : sorted.length === 0 ? (
@@ -398,11 +487,49 @@ export default function ExpensesPage() {
               ))}
             </div>
 
+            {/* Bulk action bar */}
+            {selectedIds.size > 0 && (
+              <div className="hidden md:flex items-center gap-3 mb-3 px-3 py-2 bg-slate-800 text-white rounded-xl text-sm">
+                <CheckSquare size={15} className="text-slate-300" />
+                <span className="font-semibold">{selectedIds.size} selected</span>
+                <div className="flex gap-2 ml-auto">
+                  <button
+                    onClick={handleBulkPay}
+                    disabled={bulkLoading}
+                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    Mark All Paid
+                  </button>
+                  <button
+                    onClick={handleBulkDelete}
+                    disabled={bulkLoading}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
+                    <Trash2 size={12} /> Delete
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
+                    <th className="pb-3 pr-3 w-8">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300 text-slate-800 cursor-pointer"
+                        checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
                     {(
                       [
                         { key: 'due_date', label: 'Due Date' },
@@ -435,7 +562,15 @@ export default function ExpensesPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {sorted.map((item: ExpenseItem) => (
-                    <tr key={item.id}>
+                    <tr key={item.id} className={selectedIds.has(item.id) ? 'bg-slate-50' : ''}>
+                      <td className="py-3 pr-3">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-300 text-slate-800 cursor-pointer"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => toggleSelect(item.id)}
+                        />
+                      </td>
                       <td className="py-3 pr-4 text-slate-600">{formatDate(item.due_date)}</td>
                       <td className="py-3 pr-4 font-medium text-slate-900">{item.name}</td>
                       <td className="py-3 pr-4 text-slate-500">{item.property?.name ?? '—'}</td>

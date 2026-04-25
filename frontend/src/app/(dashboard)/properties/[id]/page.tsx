@@ -373,7 +373,7 @@ export default function PropertyDetailPage() {
                   <div>
                     <p className="text-xs text-slate-500 mb-1 font-medium">Maintenance Items</p>
                     {editedMaintenance.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 mb-1.5">
+                      <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 mb-1.5">
                         <input
                           type="text"
                           className="flex-1 border border-slate-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -386,7 +386,7 @@ export default function PropertyDetailPage() {
                         />
                         <input
                           type="number"
-                          className="w-24 border border-slate-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          className="w-full sm:w-24 border border-slate-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                           value={item.amount}
                           onChange={(e) => {
                             const next = [...editedMaintenance];

@@ -21,7 +21,10 @@ def _monthly_equivalent(amount: float, frequency: str) -> float:
         return float(amount) * 26 / 12
     if freq == "quarterly":
         return float(amount) / 3
-    # monthly / ad_hoc / other
+    if freq == "yearly":
+        return float(amount) / 12
+    if freq == "ad_hoc":
+        return 0.0
     return float(amount)
 
 
@@ -36,12 +39,14 @@ def get_dashboard_summary(
     current_month = today.month
 
     # ------------------------------------------------------------------
-    # Total monthly income
+    # Total monthly income — scoped to current user
     # ------------------------------------------------------------------
-    # Recurring income (normalised to monthly)
     recurring_income_items = (
         db.query(models.IncomeItem)
-        .filter(models.IncomeItem.is_recurring == True)
+        .filter(
+            models.IncomeItem.user_id == current_user.id,
+            models.IncomeItem.is_recurring == True,
+        )
         .all()
     )
     total_monthly_income = sum(
@@ -49,10 +54,10 @@ def get_dashboard_summary(
         for item in recurring_income_items
     )
 
-    # Non-recurring income received this calendar month
     non_recurring_this_month = (
         db.query(models.IncomeItem)
         .filter(
+            models.IncomeItem.user_id == current_user.id,
             models.IncomeItem.is_recurring == False,
             models.IncomeItem.received_date != None,  # noqa: E711
         )
@@ -64,11 +69,12 @@ def get_dashboard_summary(
             total_monthly_income += float(item.amount)
 
     # ------------------------------------------------------------------
-    # Total monthly expenses
+    # Total monthly expenses — scoped to current user
     # ------------------------------------------------------------------
     expenses_this_month = (
         db.query(models.ExpenseItem)
         .filter(
+            models.ExpenseItem.user_id == current_user.id,
             models.ExpenseItem.due_date != None,  # noqa: E711
         )
         .all()
@@ -81,10 +87,12 @@ def get_dashboard_summary(
     if expenses_this_month_filtered:
         total_monthly_expenses = sum(float(e.amount) for e in expenses_this_month_filtered)
     else:
-        # Fall back to recurring templates sum
         active_templates = (
             db.query(models.RecurringTemplate)
-            .filter(models.RecurringTemplate.is_active == True)
+            .filter(
+                models.RecurringTemplate.user_id == current_user.id,
+                models.RecurringTemplate.is_active == True,
+            )
             .all()
         )
         total_monthly_expenses = sum(float(t.amount) for t in active_templates)
@@ -92,12 +100,13 @@ def get_dashboard_summary(
     net_cashflow = total_monthly_income - total_monthly_expenses
 
     # ------------------------------------------------------------------
-    # Upcoming 7 days
+    # Upcoming 7 days — scoped to current user
     # ------------------------------------------------------------------
     window_7 = now + timedelta(days=7)
     upcoming_7_raw = (
         db.query(models.ExpenseItem)
         .filter(
+            models.ExpenseItem.user_id == current_user.id,
             models.ExpenseItem.due_date >= now,
             models.ExpenseItem.due_date <= window_7,
             models.ExpenseItem.status != "paid",
@@ -107,12 +116,13 @@ def get_dashboard_summary(
     )
 
     # ------------------------------------------------------------------
-    # Upcoming 30 days
+    # Upcoming 30 days — scoped to current user
     # ------------------------------------------------------------------
     window_30 = now + timedelta(days=30)
     upcoming_30_raw = (
         db.query(models.ExpenseItem)
         .filter(
+            models.ExpenseItem.user_id == current_user.id,
             models.ExpenseItem.due_date >= now,
             models.ExpenseItem.due_date <= window_30,
             models.ExpenseItem.status != "paid",
@@ -122,11 +132,12 @@ def get_dashboard_summary(
     )
 
     # ------------------------------------------------------------------
-    # Overdue items
+    # Overdue items — scoped to current user
     # ------------------------------------------------------------------
     overdue_raw = (
         db.query(models.ExpenseItem)
         .filter(
+            models.ExpenseItem.user_id == current_user.id,
             models.ExpenseItem.due_date < now,
             models.ExpenseItem.status == "pending",
         )
@@ -135,11 +146,12 @@ def get_dashboard_summary(
     )
 
     # ------------------------------------------------------------------
-    # Next 7 unfunded — upcoming pending items regardless of date window
+    # Next 7 unfunded — scoped to current user
     # ------------------------------------------------------------------
     next_unfunded_raw = (
         db.query(models.ExpenseItem)
         .filter(
+            models.ExpenseItem.user_id == current_user.id,
             models.ExpenseItem.due_date >= now,
             models.ExpenseItem.status == "pending",
         )
@@ -149,11 +161,12 @@ def get_dashboard_summary(
     )
 
     # ------------------------------------------------------------------
-    # Pending reimbursements
+    # Pending reimbursements — scoped to current user
     # ------------------------------------------------------------------
     pending_reimb_raw = (
         db.query(models.IncomeItem)
         .filter(
+            models.IncomeItem.user_id == current_user.id,
             models.IncomeItem.type == "reimbursement",
             models.IncomeItem.reimbursement_status == "pending",
         )
@@ -161,11 +174,35 @@ def get_dashboard_summary(
     )
 
     # ------------------------------------------------------------------
-    # Cashflow trend – last 6 months
+    # Cashflow trend – last 6 months, scoped to current user
     # ------------------------------------------------------------------
+    # Fetch all user income and expenses once to avoid 12 DB round-trips
+    all_user_income = (
+        db.query(models.IncomeItem)
+        .filter(models.IncomeItem.user_id == current_user.id)
+        .all()
+    )
+    all_user_expenses = (
+        db.query(models.ExpenseItem)
+        .filter(models.ExpenseItem.user_id == current_user.id)
+        .all()
+    )
+    user_active_templates = (
+        db.query(models.RecurringTemplate)
+        .filter(
+            models.RecurringTemplate.user_id == current_user.id,
+            models.RecurringTemplate.is_active == True,
+        )
+        .all()
+    )
+    recurring_income_monthly = sum(
+        _monthly_equivalent(float(item.amount), item.frequency or "monthly")
+        for item in recurring_income_items
+    )
+    template_expenses_total = sum(float(t.amount) for t in user_active_templates)
+
     trend: List[CashflowTrend] = []
     for i in range(5, -1, -1):
-        # Go back i months from current month
         month_offset = current_month - i
         year_offset = current_year
         while month_offset <= 0:
@@ -174,10 +211,8 @@ def get_dashboard_summary(
 
         month_label = f"{year_offset}-{month_offset:02d}"
 
-        # Income for this month: received_date OR expected_date in that month
-        all_income = db.query(models.IncomeItem).all()
         month_income = 0.0
-        for inc in all_income:
+        for inc in all_user_income:
             rd = inc.received_date
             ed = inc.expected_date
             if (rd and rd.year == year_offset and rd.month == month_offset) or (
@@ -185,30 +220,18 @@ def get_dashboard_summary(
             ):
                 month_income += float(inc.amount)
 
-        # Expenses for this month
-        all_expenses = db.query(models.ExpenseItem).all()
         month_expenses_items = [
-            e for e in all_expenses
+            e for e in all_user_expenses
             if e.due_date and e.due_date.year == year_offset and e.due_date.month == month_offset
         ]
 
         if month_expenses_items:
             month_expenses = sum(float(e.amount) for e in month_expenses_items)
         else:
-            # Fall back to templates total if no expense items recorded for that month
-            active_templates = (
-                db.query(models.RecurringTemplate)
-                .filter(models.RecurringTemplate.is_active == True)
-                .all()
-            )
-            month_expenses = sum(float(t.amount) for t in active_templates)
+            month_expenses = template_expenses_total
 
-        # For income, fall back to recurring income total if no recorded income
         if month_income == 0.0:
-            month_income = sum(
-                _monthly_equivalent(float(item.amount), item.frequency or "monthly")
-                for item in recurring_income_items
-            )
+            month_income = recurring_income_monthly
 
         trend.append(
             CashflowTrend(

@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { PageSpinner } from '@/components/ui/Spinner';
+import { TableSkeleton } from '@/components/ui/Skeleton';
 import { incomeApi, propertiesApi } from '@/lib/api';
 import {
   formatCurrency,
@@ -14,7 +14,32 @@ import {
   FREQUENCY_LABELS,
 } from '@/lib/utils';
 import { IncomeItem, Property, IncomeType, Frequency } from '@/types';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Download } from 'lucide-react';
+import { toast } from 'sonner';
+
+function exportIncomeToCSV(items: IncomeItem[]) {
+  const headers = ['Name', 'Type', 'Amount', 'Monthly Equiv.', 'Frequency', 'Property', 'Status', 'Notes'];
+  const rows = items.map(item => [
+    item.name,
+    INCOME_TYPE_LABELS[item.type] ?? item.type,
+    item.amount.toFixed(2),
+    toMonthlyAmount(item).toFixed(2),
+    item.frequency ? (FREQUENCY_LABELS[item.frequency] ?? item.frequency) : 'One-off',
+    item.property?.name ?? '',
+    item.type === 'reimbursement' ? (item.reimbursement_status ?? 'pending') : item.is_recurring ? 'recurring' : 'one-off',
+    item.notes ?? '',
+  ]);
+  const csv = [headers, ...rows]
+    .map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `income-${new Date().toISOString().slice(0, 7)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function toMonthlyAmount(item: IncomeItem): number {
   if (!item.is_recurring || !item.frequency) return item.amount;
@@ -248,6 +273,9 @@ export default function IncomePage() {
     try {
       await incomeApi.receive(id);
       await queryClient.invalidateQueries({ queryKey: ['income'] });
+      toast.success('Marked as received');
+    } catch {
+      toast.error('Failed to update');
     } finally { setActionId(null); }
   };
 
@@ -257,18 +285,21 @@ export default function IncomePage() {
     try {
       await incomeApi.delete(id);
       await queryClient.invalidateQueries({ queryKey: ['income'] });
+      toast.success('Income deleted');
+    } catch {
+      toast.error('Failed to delete');
     } finally { setActionId(null); }
   };
 
   const totalMonthly = data?.reduce((sum: number, item: IncomeItem) => sum + toMonthlyAmount(item), 0) ?? 0;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-4">
       {showAdd && (
         <AddIncomeModal
           properties={properties}
           onClose={() => setShowAdd(false)}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ['income'] })}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey: ['income'] }); toast.success('Income added'); }}
         />
       )}
       {editItem && (
@@ -276,20 +307,31 @@ export default function IncomePage() {
           item={editItem}
           properties={properties}
           onClose={() => setEditItem(null)}
-          onSaved={() => { queryClient.invalidateQueries({ queryKey: ['income'] }); }}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey: ['income'] }); toast.success('Income updated'); }}
         />
       )}
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Income</h1>
-        <Button size="sm" onClick={() => setShowAdd(true)}>
-          <Plus size={15} className="mr-1" /> Add Income
-        </Button>
+        <h1 className="text-xl font-bold text-slate-900">Income</h1>
+        <div className="flex items-center gap-2">
+          {data && data.length > 0 && (
+            <button
+              onClick={() => exportIncomeToCSV(data)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              title="Export to CSV"
+            >
+              <Download size={13} /> Export
+            </button>
+          )}
+          <Button size="sm" onClick={() => setShowAdd(true)}>
+            <Plus size={15} className="mr-1" /> Add Income
+          </Button>
+        </div>
       </div>
 
       <Card>
         {isLoading ? (
-          <PageSpinner />
+          <TableSkeleton rows={5} cols={8} />
         ) : error ? (
           <p className="text-sm text-red-600">Failed to load income data.</p>
         ) : !data || data.length === 0 ? (

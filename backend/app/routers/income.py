@@ -21,7 +21,7 @@ def list_income(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.IncomeItem)
+    query = db.query(models.IncomeItem).filter(models.IncomeItem.user_id == current_user.id)
 
     if type is not None:
         query = query.filter(models.IncomeItem.type == type)
@@ -36,13 +36,11 @@ def list_income(
         .all()
     )
 
-    # Filter by month/year if provided (using expected_date, falling back to received_date)
     if month is not None or year is not None:
         filtered = []
         for item in items:
             ref_date = item.expected_date or item.received_date
             if ref_date is None:
-                # Include recurring items with no date when filtering by month/year
                 if item.is_recurring:
                     filtered.append(item)
                 continue
@@ -62,7 +60,7 @@ def create_income(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    income = models.IncomeItem(**data.model_dump())
+    income = models.IncomeItem(**data.model_dump(), user_id=current_user.id)
     db.add(income)
     db.commit()
     db.refresh(income)
@@ -76,7 +74,11 @@ def update_income(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    income = db.query(models.IncomeItem).filter(models.IncomeItem.id == income_id).first()
+    income = (
+        db.query(models.IncomeItem)
+        .filter(models.IncomeItem.id == income_id, models.IncomeItem.user_id == current_user.id)
+        .first()
+    )
     if not income:
         raise HTTPException(status_code=404, detail="Income item not found")
 
@@ -95,7 +97,11 @@ def delete_income(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    income = db.query(models.IncomeItem).filter(models.IncomeItem.id == income_id).first()
+    income = (
+        db.query(models.IncomeItem)
+        .filter(models.IncomeItem.id == income_id, models.IncomeItem.user_id == current_user.id)
+        .first()
+    )
     if not income:
         raise HTTPException(status_code=404, detail="Income item not found")
     db.delete(income)
@@ -109,7 +115,11 @@ def mark_received(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    income = db.query(models.IncomeItem).filter(models.IncomeItem.id == income_id).first()
+    income = (
+        db.query(models.IncomeItem)
+        .filter(models.IncomeItem.id == income_id, models.IncomeItem.user_id == current_user.id)
+        .first()
+    )
     if not income:
         raise HTTPException(status_code=404, detail="Income item not found")
 

@@ -19,6 +19,7 @@ class Property(Base):
     __tablename__ = "properties"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String, nullable=False)
     address = Column(String, nullable=True)
     tenant_liable_for_water = Column(Boolean, default=False)
@@ -36,11 +37,13 @@ class RecurringTemplate(Base):
     __tablename__ = "recurring_templates"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     frequency = Column(String, nullable=False, default="monthly")
     day_of_month = Column(Integer, nullable=True)
+    month_of_year = Column(Integer, nullable=True)  # 1-12, only used when frequency='yearly'
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -55,6 +58,7 @@ class ExpenseItem(Base):
     __tablename__ = "expense_items"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
@@ -77,6 +81,7 @@ class IncomeItem(Base):
     __tablename__ = "income_items"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)  # salary, rental, reimbursement, other
     amount = Column(Numeric(10, 2), nullable=False)

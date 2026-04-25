@@ -16,12 +16,22 @@ function AuthCallbackInner() {
 
   useEffect(() => {
     const code = searchParams.get('code');
+    const type = searchParams.get('type'); // 'recovery' for password reset emails
+
     if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(() => {
-        router.replace('/dashboard');
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          router.replace('/login?error=callback_failed');
+          return;
+        }
+        if (type === 'recovery') {
+          router.replace('/auth/reset-password');
+        } else {
+          router.replace('/dashboard');
+        }
       });
     } else {
-      router.replace('/dashboard');
+      router.replace('/login');
     }
   }, [router, searchParams]);
 

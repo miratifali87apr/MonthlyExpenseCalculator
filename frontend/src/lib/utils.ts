@@ -65,10 +65,11 @@ export const INCOME_TYPE_LABELS: Record<string, string> = {
 };
 
 export const FREQUENCY_LABELS: Record<string, string> = {
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
   weekly: 'Weekly',
   fortnightly: 'Fortnightly',
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  yearly: 'Yearly',
   ad_hoc: 'Ad Hoc',
 };
 
@@ -88,10 +89,11 @@ export const CATEGORIES = [
 ] as const;
 
 export const FREQUENCIES = [
-  'monthly',
-  'quarterly',
   'weekly',
   'fortnightly',
+  'monthly',
+  'quarterly',
+  'yearly',
   'ad_hoc',
 ] as const;
 

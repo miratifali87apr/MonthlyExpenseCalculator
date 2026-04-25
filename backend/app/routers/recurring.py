@@ -25,6 +25,7 @@ def list_recurring_templates(
 ):
     templates = (
         db.query(models.RecurringTemplate)
+        .filter(models.RecurringTemplate.user_id == current_user.id)
         .order_by(
             models.RecurringTemplate.day_of_month.asc().nulls_last(),
             models.RecurringTemplate.name.asc(),
@@ -40,7 +41,7 @@ def create_recurring_template(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    template = models.RecurringTemplate(**data.model_dump())
+    template = models.RecurringTemplate(**data.model_dump(), user_id=current_user.id)
     db.add(template)
     db.commit()
     db.refresh(template)
@@ -56,7 +57,10 @@ def update_recurring_template(
 ):
     template = (
         db.query(models.RecurringTemplate)
-        .filter(models.RecurringTemplate.id == template_id)
+        .filter(
+            models.RecurringTemplate.id == template_id,
+            models.RecurringTemplate.user_id == current_user.id,
+        )
         .first()
     )
     if not template:
@@ -80,7 +84,10 @@ def deactivate_recurring_template(
     """Soft delete – sets is_active=False rather than removing the record."""
     template = (
         db.query(models.RecurringTemplate)
-        .filter(models.RecurringTemplate.id == template_id)
+        .filter(
+            models.RecurringTemplate.id == template_id,
+            models.RecurringTemplate.user_id == current_user.id,
+        )
         .first()
     )
     if not template:
@@ -99,14 +106,13 @@ def generate_from_templates(
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Generate expense items from all active recurring templates for a given month/year.
+    Generate expense items from the current user's active recurring templates for a given month/year.
     Defaults to next month if not specified.
     Skips any template+month combination that already has an expense item.
     """
     now = datetime.now(timezone.utc)
     today = now.date()
 
-    # Default: next month
     if month is None or year is None:
         next_month = today.month + 1
         next_year = today.year
@@ -121,24 +127,33 @@ def generate_from_templates(
 
     active_templates = (
         db.query(models.RecurringTemplate)
-        .filter(models.RecurringTemplate.is_active == True)
+        .filter(
+            models.RecurringTemplate.user_id == current_user.id,
+            models.RecurringTemplate.is_active == True,
+        )
         .all()
     )
 
     generated_count = 0
 
     for template in active_templates:
+        # Yearly templates only fire in their designated month
+        if template.frequency == "yearly":
+            desired_month = template.month_of_year or 1
+            if target_month != desired_month:
+                continue
+
         day = template.day_of_month or 1
         max_day = calendar.monthrange(target_year, target_month)[1]
         clamped_day = min(day, max_day)
 
         due_dt = datetime(target_year, target_month, clamped_day, tzinfo=timezone.utc)
 
-        # Check if expense item already exists for this template + year + month
         existing = (
             db.query(models.ExpenseItem)
             .filter(
                 models.ExpenseItem.template_id == template.id,
+                models.ExpenseItem.user_id == current_user.id,
                 models.ExpenseItem.is_recurring == True,
             )
             .all()
@@ -164,6 +179,7 @@ def generate_from_templates(
             template_id=template.id,
             is_recurring=True,
             notes=template.notes,
+            user_id=current_user.id,
         )
         db.add(expense)
         generated_count += 1

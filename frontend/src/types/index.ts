@@ -3,7 +3,7 @@ export type Category =
   | 'bas' | 'school_fees' | 'credit_card' | 'car'
   | 'pm_fees' | 'maintenance' | 'letting_fee' | 'other';
 
-export type Frequency = 'monthly' | 'quarterly' | 'weekly' | 'fortnightly' | 'ad_hoc';
+export type Frequency = 'monthly' | 'quarterly' | 'weekly' | 'fortnightly' | 'yearly' | 'ad_hoc';
 
 export type PaymentStatus = 'pending' | 'paid' | 'overdue' | 'funded' | 'partial';
 
@@ -31,6 +31,7 @@ export interface RecurringTemplate {
   amount: number;
   frequency: Frequency;
   day_of_month?: number;
+  month_of_year?: number;
   property_id?: number;
   property?: Property;
   notes?: string;

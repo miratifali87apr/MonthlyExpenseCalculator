@@ -20,6 +20,10 @@ def _monthly_equivalent(amount: float, frequency: str) -> float:
         return float(amount) * 26 / 12
     if freq == "quarterly":
         return float(amount) / 3
+    if freq == "yearly":
+        return float(amount) / 12
+    if freq == "ad_hoc":
+        return 0.0
     return float(amount)
 
 
@@ -28,7 +32,12 @@ def list_properties(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    properties = db.query(models.Property).order_by(models.Property.name.asc()).all()
+    properties = (
+        db.query(models.Property)
+        .filter(models.Property.user_id == current_user.id)
+        .order_by(models.Property.name.asc())
+        .all()
+    )
     return [PropertyResponse.model_validate(p) for p in properties]
 
 
@@ -38,7 +47,7 @@ def create_property(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    prop = models.Property(**data.model_dump())
+    prop = models.Property(**data.model_dump(), user_id=current_user.id)
     db.add(prop)
     db.commit()
     db.refresh(prop)
@@ -52,7 +61,11 @@ def update_property(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    prop = db.query(models.Property).filter(models.Property.id == property_id).first()
+    prop = (
+        db.query(models.Property)
+        .filter(models.Property.id == property_id, models.Property.user_id == current_user.id)
+        .first()
+    )
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
 
@@ -71,7 +84,11 @@ def delete_property(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    prop = db.query(models.Property).filter(models.Property.id == property_id).first()
+    prop = (
+        db.query(models.Property)
+        .filter(models.Property.id == property_id, models.Property.user_id == current_user.id)
+        .first()
+    )
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
     db.delete(prop)
@@ -84,7 +101,11 @@ def get_property_summary(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    prop = db.query(models.Property).filter(models.Property.id == property_id).first()
+    prop = (
+        db.query(models.Property)
+        .filter(models.Property.id == property_id, models.Property.user_id == current_user.id)
+        .first()
+    )
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
 
@@ -92,12 +113,12 @@ def get_property_summary(
     current_year = now.year
     current_month = now.month
 
-    # ------------------------------------------------------------------
-    # Total income (monthly equivalent from recurring; non-recurring this month)
-    # ------------------------------------------------------------------
     income_items = (
         db.query(models.IncomeItem)
-        .filter(models.IncomeItem.property_id == property_id)
+        .filter(
+            models.IncomeItem.property_id == property_id,
+            models.IncomeItem.user_id == current_user.id,
+        )
         .all()
     )
 
@@ -110,12 +131,12 @@ def get_property_summary(
             if rd and rd.year == current_year and rd.month == current_month:
                 total_income += float(item.amount)
 
-    # ------------------------------------------------------------------
-    # Total expenses this month (or fall back to templates)
-    # ------------------------------------------------------------------
     expense_items = (
         db.query(models.ExpenseItem)
-        .filter(models.ExpenseItem.property_id == property_id)
+        .filter(
+            models.ExpenseItem.property_id == property_id,
+            models.ExpenseItem.user_id == current_user.id,
+        )
         .all()
     )
     expenses_this_month = [
@@ -131,11 +152,11 @@ def get_property_summary(
             expense_breakdown[cat] = expense_breakdown.get(cat, 0.0) + float(e.amount)
         total_expenses = sum(expense_breakdown.values())
     else:
-        # Fall back to active templates for this property
         templates = (
             db.query(models.RecurringTemplate)
             .filter(
                 models.RecurringTemplate.property_id == property_id,
+                models.RecurringTemplate.user_id == current_user.id,
                 models.RecurringTemplate.is_active == True,
             )
             .all()

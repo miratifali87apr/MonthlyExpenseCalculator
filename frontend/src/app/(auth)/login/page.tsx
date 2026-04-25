@@ -56,8 +56,24 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  async function handleForgotPassword() {
+    if (!email) { setError('Enter your email address first, then click Forgot password.'); return; }
+    setResetLoading(true);
+    setError('');
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+    });
+    setResetLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      setMessage('Password reset email sent — check your inbox.');
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,7 +118,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-4 backdrop-blur-sm border border-white/20">
             <DollarSign className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Finance Tracker</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Finance Tracker</h1>
           <p className="text-slate-400 mt-2 text-sm">Property & personal finance management</p>
         </div>
 
@@ -168,7 +184,19 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-slate-700">Password</label>
+                {tab === 'signin' && (
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={resetLoading}
+                    className="text-xs text-slate-500 hover:text-slate-800 transition-colors disabled:opacity-50"
+                  >
+                    {resetLoading ? 'Sending…' : 'Forgot password?'}
+                  </button>
+                )}
+              </div>
               <input
                 type="password"
                 value={password}

@@ -40,10 +40,10 @@ export function MobileNav({ onLogout }: MobileNavProps) {
       })}
       <button
         onClick={onLogout}
-        className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium text-slate-500 hover:text-red-400 transition-colors"
+        title="Logout"
+        className="w-10 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium text-slate-500 hover:text-red-400 transition-colors"
       >
         <LogOut size={18} />
-        Logout
       </button>
     </nav>
   );

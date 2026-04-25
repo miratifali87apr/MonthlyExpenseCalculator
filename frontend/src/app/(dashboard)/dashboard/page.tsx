@@ -6,12 +6,14 @@ import {
 } from 'recharts';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { PageSpinner } from '@/components/ui/Spinner';
+import { DashboardSkeleton } from '@/components/ui/Skeleton';
 import { dashboardApi, expensesApi } from '@/lib/api';
 import { formatCurrency, formatDate, formatMonth } from '@/lib/utils';
 import type { ExpenseItem, IncomeItem } from '@/types';
+import Link from 'next/link';
 import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
@@ -29,6 +31,9 @@ export default function DashboardPage() {
       await expensesApi.pay(id);
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       await queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Marked as paid');
+    } catch {
+      toast.error('Failed to mark as paid');
     } finally { setPayingId(null); }
   };
 
@@ -38,15 +43,51 @@ export default function DashboardPage() {
       await expensesApi.fund(id);
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       await queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Marked as funded');
+    } catch {
+      toast.error('Failed to fund');
     } finally { setFundingId(null); }
   };
 
-  if (isLoading) return <PageSpinner />;
+  if (isLoading) return <DashboardSkeleton />;
   if (error) return <div className="text-red-600 p-4">Failed to load dashboard.</div>;
   if (!data) return null;
 
+  const isEmpty =
+    data.total_monthly_income === 0 &&
+    data.total_monthly_expenses === 0 &&
+    data.upcoming_7_days.length === 0 &&
+    data.overdue_items.length === 0;
+
   const netPositive = data.net_cashflow >= 0;
   const totalUnfunded = data.next_unfunded.reduce((s, i) => s + i.amount, 0);
+
+  if (isEmpty) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mb-6">
+          <svg className="w-10 h-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Welcome to Finance Tracker</h2>
+        <p className="text-slate-500 max-w-sm mb-8">
+          Your dashboard is empty. Start by adding your income, expenses, or a property to see your cashflow.
+        </p>
+        <div className="flex flex-wrap gap-3 justify-center">
+          <Link href="/income" className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition-colors shadow-sm">
+            + Add Income
+          </Link>
+          <Link href="/expenses" className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 transition-colors shadow-sm">
+            + Add Expense
+          </Link>
+          <Link href="/properties" className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 transition-colors shadow-sm">
+            + Add Property
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

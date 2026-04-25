@@ -254,52 +254,111 @@ function PredictorTab() {
   });
   const [state, setState] = useState<AusState>('QLD');
   const [structure, setStructure] = useState<OwnershipStructure>('individual');
-  const [annualSalary, setAnnualSalary] = useState('');
-  const [beneficiaries, setBeneficiaries] = useState('1');
+  const [annualSalary, setAnnualSalary] = useState('120000');
   const [councilRates, setCouncilRates] = useState('2000');
+  // Loan
+  const [repaymentType, setRepaymentType] = useState<'io' | 'pi'>('io');
+  const [loanTerm, setLoanTerm] = useState('30');
+  // Land value
+  const [landValuePct, setLandValuePct] = useState('40');
+  // Ongoing cost inputs
+  const [pmFeePct, setPmFeePct] = useState('7.5');
+  const [waterRates, setWaterRates] = useState('1200');
+  const [insuranceAmt, setInsuranceAmt] = useState('1800');
+  const [maintenancePct, setMaintenancePct] = useState('0.75');
+  const [strataFees, setStrataFees] = useState('5000');
+  // Depreciation
+  const [depreciationEnabled, setDepreciationEnabled] = useState(false);
+  const [buildingCostPct, setBuildingCostPct] = useState('');
+  const [plantEquipment, setPlantEquipment] = useState<'new' | 'pre2017' | 'post2017'>('new');
+  // Structure-specific
+  const [companyTaxRate, setCompanyTaxRate] = useState(25);
+  const [smsfPhase, setSmsfPhase] = useState<'accumulation' | 'pension'>('accumulation');
+  const [trustBeneficiaryRate, setTrustBeneficiaryRate] = useState('45');
+  // Projection
+  const [growthRate, setGrowthRate] = useState('6');
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PurchaseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showTax, setShowTax] = useState(true);
   const [showCosts, setShowCosts] = useState(true);
+  const [showDepreciation, setShowDepreciation] = useState(false);
 
+  // ── Parsed inputs ─────────────────────────────────────────────────────────
   const purchasePrice = parseFloat(form.purchase_price) || 0;
   const deposit = parseFloat(form.deposit) || 20;
   const interestRate = parseFloat(form.interest_rate) || 6.5;
   const weeklyRent = parseFloat(form.weekly_rent) || 0;
   const salary = parseFloat(annualSalary) || 0;
-  const numBeneficiaries = parseInt(beneficiaries) || 1;
   const annualCouncilRates = parseFloat(councilRates) || 0;
+  const loanTermYears = parseInt(loanTerm) || 30;
+  const landValPct = parseFloat(landValuePct) || 40;
+  const pmFeeRate = parseFloat(pmFeePct) || 7.5;
+  const annualWaterRates = parseFloat(waterRates) || 1200;
+  const annualInsurance = parseFloat(insuranceAmt) || 1800;
+  const maintenanceRate = parseFloat(maintenancePct) || 0.75;
+  const annualStrataInput = parseFloat(strataFees) || 5000;
+  const growthRatePct = parseFloat(growthRate) || 6;
+  const trustBenefRate = parseFloat(trustBeneficiaryRate) || 45;
 
+  // ── Loan calcs ────────────────────────────────────────────────────────────
   const lvr = 100 - deposit;
   const loanAmount = purchasePrice * (1 - deposit / 100);
   const monthlyRate = interestRate / 100 / 12;
-  const monthlyRepayment =
-    loanAmount > 0 && monthlyRate > 0
-      ? (loanAmount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -360))
-      : 0;
-  const monthlyRent = (weeklyRent * 52) / 12;
-  const grossYield = purchasePrice > 0 ? (weeklyRent * 52) / purchasePrice * 100 : 0;
-  const monthlyCashflow = monthlyRent - monthlyRepayment;
+  const n = loanTermYears * 12;
+  const monthlyRepayment = loanAmount > 0 && monthlyRate > 0
+    ? repaymentType === 'io'
+      ? loanAmount * monthlyRate
+      : loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, n)) / (Math.pow(1 + monthlyRate, n) - 1)
+    : 0;
 
-  // Acquisition costs
+  // ── Income ────────────────────────────────────────────────────────────────
+  const grossAnnualRent = weeklyRent * 52;
+  const vacancyAllowance = grossAnnualRent * 0.026;
+  const effectiveAnnualRent = grossAnnualRent - vacancyAllowance;
+  const grossYield = purchasePrice > 0 ? grossAnnualRent / purchasePrice * 100 : 0;
+
+  // ── Ongoing costs ─────────────────────────────────────────────────────────
+  const estimatedLandValue = purchasePrice * (landValPct / 100);
+  const annualLandTax = calcLandTax(estimatedLandValue, structure, state);
+  const annualInterest = loanAmount * (interestRate / 100);
+  const annualPmFees = grossAnnualRent * (pmFeeRate / 100);
+  const lettingFee = weeklyRent; // 1 week rent/yr
+  const annualMaintenance = purchasePrice * (maintenanceRate / 100);
+  const isUnitOrTownhouse = form.property_type === 'Unit/Apartment' || form.property_type === 'Townhouse';
+  const annualStrata = isUnitOrTownhouse ? annualStrataInput : 0;
+
+  // ── Depreciation ──────────────────────────────────────────────────────────
+  const defaultBuildCostPct = isUnitOrTownhouse ? 85 : 60;
+  const buildCostPctNum = parseFloat(buildingCostPct) || defaultBuildCostPct;
+  const divFortyThree = depreciationEnabled ? purchasePrice * (buildCostPctNum / 100) * 0.025 : 0;
+  const divFortyMap: Record<string, number> = { new: 8000, pre2017: 3000, post2017: 0 };
+  const divForty = depreciationEnabled ? (divFortyMap[plantEquipment] ?? 0) : 0;
+  const totalDepreciation = divFortyThree + divForty;
+
+  // ── Acquisition costs ─────────────────────────────────────────────────────
   const lmi = calcLMI(loanAmount, lvr);
-  const stampDuty = purchasePrice > 0 ? calcStampDuty(purchasePrice, state) : 0;
+  const stampDuty = purchasePrice > 0 ? calcStampDuty(purchasePrice, state, structure) : 0;
   const conveyancing = purchasePrice * 0.002;
   const totalAcquisitionCosts = stampDuty + lmi + conveyancing;
   const totalCashRequired = purchasePrice * (deposit / 100) + totalAcquisitionCosts;
 
-  // Ongoing costs & tax calcs
-  const estimatedLandValue = purchasePrice * 0.3;
-  const annualLandTax = calcLandTax(estimatedLandValue, structure, state);
-  const annualInterest = loanAmount * (interestRate / 100);
-  const annualRental = weeklyRent * 52;
-  const annualMgmtFees = annualRental * 0.08;
-  const annualDeductibles = annualInterest + annualMgmtFees + annualCouncilRates + annualLandTax;
-  const netRentalForTax = annualRental - annualDeductibles;
+  // ── Pre-tax cashflow (actual cash in/out) ─────────────────────────────────
+  const annualCashExpenses = annualPmFees + lettingFee + annualCouncilRates + annualWaterRates + annualInsurance + annualMaintenance + annualStrata + annualLandTax;
+  const preTaxAnnualCashflow = effectiveAnnualRent - (monthlyRepayment * 12) - annualCashExpenses;
+  const monthlyCashflow = preTaxAnnualCashflow / 12;
 
+  // ── Yields ────────────────────────────────────────────────────────────────
+  const netYield = purchasePrice > 0 ? (grossAnnualRent - annualCashExpenses) / purchasePrice * 100 : 0;
+
+  // ── Tax deductibles (interest only for P&I, not principal) ────────────────
+  const deductiblesBase = annualInterest + annualPmFees + lettingFee + annualCouncilRates + annualWaterRates + annualInsurance + annualMaintenance + annualStrata + annualLandTax;
+  const netRentalForTax = grossAnnualRent - (structure === 'individual' ? deductiblesBase + totalDepreciation : deductiblesBase);
+
+  // ── Tax benefit / cost ────────────────────────────────────────────────────
   let monthlyTaxBenefit = 0;
+  let annualTaxBenefit = 0;
   let taxRate = 0;
   let taxNote = '';
   let taxRateLabel = '';
@@ -309,45 +368,57 @@ function PredictorTab() {
     taxRateLabel = salary > 0 ? getMarginalRateLabel(salary) : 'Enter salary to calculate';
     if (salary > 0) {
       if (netRentalForTax < 0) {
-        monthlyTaxBenefit = (Math.abs(netRentalForTax) * taxRate) / 12;
-        taxNote = `Negative gearing saves ${formatCurrency(Math.abs(netRentalForTax) * taxRate)}/yr at ${(taxRate * 100).toFixed(0)}% marginal rate`;
+        annualTaxBenefit = Math.abs(netRentalForTax) * taxRate;
+        taxNote = `Negative gearing saves ${formatCurrency(annualTaxBenefit)}/yr at ${(taxRate * 100).toFixed(0)}% marginal rate`;
       } else {
-        monthlyTaxBenefit = -(netRentalForTax * taxRate) / 12;
+        annualTaxBenefit = -(netRentalForTax * taxRate);
         taxNote = `Net rental income ${formatCurrency(netRentalForTax)}/yr taxed at ${(taxRate * 100).toFixed(0)}% marginal rate`;
       }
+      monthlyTaxBenefit = annualTaxBenefit / 12;
     }
   } else if (structure === 'trust') {
-    taxRate = 0;
-    taxRateLabel = 'No tax benefit at trust level';
-    monthlyTaxBenefit = 0;
     if (netRentalForTax < 0) {
-      taxNote = 'Trust losses cannot be distributed to beneficiaries — carried forward internally. No negative gearing benefit.';
+      taxRateLabel = 'No tax benefit at trust level';
+      taxNote = 'Trust losses cannot be distributed — carried forward internally. No negative gearing benefit.';
     } else {
-      taxNote = 'Trust distributes net income to beneficiaries who pay tax at their own marginal rates. No tax benefit is modelled here — consult your accountant for distribution planning.';
+      taxRateLabel = `${trustBenefRate}% — Beneficiary marginal rate`;
+      annualTaxBenefit = -(netRentalForTax * trustBenefRate / 100);
+      monthlyTaxBenefit = annualTaxBenefit / 12;
+      taxNote = `Trust distributes ${formatCurrency(netRentalForTax)}/yr to beneficiaries taxed at ${trustBenefRate}%.`;
     }
   } else if (structure === 'company') {
-    taxRate = 0.25;
-    taxRateLabel = '25% — Base Rate Entity (Pty Ltd)';
+    taxRate = companyTaxRate / 100;
+    taxRateLabel = `${companyTaxRate}% — ${companyTaxRate === 25 ? 'Base Rate Entity' : 'Standard'} (Pty Ltd)`;
     if (netRentalForTax < 0) {
-      monthlyTaxBenefit = 0;
-      taxNote = 'Company losses carried forward — no immediate benefit. No CGT 50% discount on sale. Consider trust structure.';
+      taxNote = 'Company losses carried forward — no immediate benefit. No CGT 50% discount on sale.';
     } else {
-      monthlyTaxBenefit = -(netRentalForTax * 0.25) / 12;
-      taxNote = 'Profits taxed at 25%. Dividends can be franked. No CGT 50% discount on property sale.';
+      annualTaxBenefit = -(netRentalForTax * taxRate);
+      monthlyTaxBenefit = annualTaxBenefit / 12;
+      taxNote = `Profits taxed at ${companyTaxRate}%. Dividends can be franked. No CGT 50% discount on sale.`;
     }
   } else if (structure === 'smsf') {
-    taxRate = 0.15;
-    taxRateLabel = '15% — Accumulation phase (0% in Pension phase)';
+    taxRate = smsfPhase === 'pension' ? 0 : 0.15;
+    taxRateLabel = smsfPhase === 'pension' ? '0% — Pension phase' : '15% — Accumulation phase';
     if (netRentalForTax < 0) {
-      monthlyTaxBenefit = 0;
-      taxNote = 'SMSF losses carried forward. Must use LRBA (limited recourse borrowing). CGT: 10% after 12 months.';
+      taxNote = `SMSF losses carried forward. Must use LRBA. CGT: ${smsfPhase === 'pension' ? '0%' : '10% after 12 months'}.`;
     } else {
-      monthlyTaxBenefit = -(netRentalForTax * 0.15) / 12;
-      taxNote = '15% on net rental in accumulation phase. 0% in pension phase. 10% CGT after 12 months.';
+      annualTaxBenefit = -(netRentalForTax * taxRate);
+      monthlyTaxBenefit = annualTaxBenefit / 12;
+      taxNote = `${smsfPhase === 'pension' ? '0%' : '15%'} on net rental. CGT: ${smsfPhase === 'pension' ? '0%' : '10% after 12 months'}.`;
     }
   }
 
   const afterTaxMonthlyCashflow = monthlyCashflow + monthlyTaxBenefit;
+  const afterTaxAnnualCashflow = afterTaxMonthlyCashflow * 12;
+
+  // ── 10-year equity projection ─────────────────────────────────────────────
+  const k = 120; // 10 years in months
+  const outstandingBalance = repaymentType === 'io' || loanAmount === 0 || monthlyRate === 0
+    ? loanAmount
+    : loanAmount * (Math.pow(1 + monthlyRate, n) - Math.pow(1 + monthlyRate, k)) / (Math.pow(1 + monthlyRate, n) - 1);
+  const futureValue = purchasePrice > 0 ? purchasePrice * Math.pow(1 + growthRatePct / 100, 10) : 0;
+  const tenYearEquity = futureValue - outstandingBalance;
+
   const isLand = form.property_type === 'Land';
   const hasCalcs = purchasePrice > 0 && (weeklyRent > 0 || isLand);
 
@@ -363,7 +434,7 @@ function PredictorTab() {
         weekly_rent: weeklyRent,
         property_type: form.property_type,
         location: form.location,
-        existing_portfolio_context: `Portfolio in Finley, Kirwan, Chigwell. State: ${state}. Ownership: ${structure}. Stamp duty: ${formatCurrency(stampDuty)}. LMI: ${formatCurrency(lmi)}. Total cash required: ${formatCurrency(totalCashRequired)}. After-tax cashflow: ${formatCurrency(afterTaxMonthlyCashflow)}/mo. Land tax (${state}): ${formatCurrency(annualLandTax)}/yr.`,
+        existing_portfolio_context: `Portfolio in Finley, Kirwan, Chigwell. State: ${state}. Ownership: ${structure}. Stamp duty: ${formatCurrency(stampDuty)}. LMI: ${formatCurrency(lmi)}. Total cash required: ${formatCurrency(totalCashRequired)}. After-tax cashflow: ${formatCurrency(afterTaxMonthlyCashflow)}/mo. Land tax (${state}): ${formatCurrency(annualLandTax)}/yr. Net yield: ${netYield.toFixed(2)}%. Repayment: ${repaymentType.toUpperCase()}.`,
       };
       const res = await fetch(`${API_URL}/api/ai/purchase-predictor`, {
         method: 'POST',
@@ -390,7 +461,7 @@ function PredictorTab() {
   const labelCls = 'block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5';
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-36">
 
       {/* Step 1 — Property Details */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -408,7 +479,7 @@ function PredictorTab() {
             <label className={labelCls}>Location</label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-              <input className={`${inputCls} pl-9`} placeholder="Suburb, State — e.g. Surry Hills NSW" value={form.location} onChange={(e) => update('location', e.target.value)} />
+              <input className={`${inputCls} pl-9`} placeholder="e.g. Surry Hills NSW" value={form.location} onChange={(e) => update('location', e.target.value)} />
             </div>
           </div>
           <div>
@@ -438,6 +509,27 @@ function PredictorTab() {
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
             </div>
           </div>
+          {/* IO / P&I toggle */}
+          <div>
+            <label className={labelCls}>Repayment Type</label>
+            <div className="flex gap-2">
+              {(['io', 'pi'] as const).map((t) => (
+                <button key={t} onClick={() => { setRepaymentType(t); setResult(null); }}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${repaymentType === t ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300'}`}>
+                  {t === 'io' ? 'Interest Only' : 'P&I'}
+                </button>
+              ))}
+            </div>
+          </div>
+          {repaymentType === 'pi' && (
+            <div>
+              <label className={labelCls}>Loan Term</label>
+              <div className="relative">
+                <input type="number" className={`${inputCls} pr-10`} value={loanTerm} onChange={(e) => setLoanTerm(e.target.value)} />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">yrs</span>
+              </div>
+            </div>
+          )}
           <div>
             <label className={labelCls}>Weekly Rent{isLand ? <span className="text-slate-300 font-normal normal-case ml-1">(optional for land)</span> : ''}</label>
             <div className="relative">
@@ -476,6 +568,49 @@ function PredictorTab() {
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
             </div>
           </div>
+          <div>
+            <label className={labelCls}>PM Fee</label>
+            <div className="relative">
+              <input type="number" step="0.1" className={`${inputCls} pr-8`} value={pmFeePct} onChange={(e) => setPmFeePct(e.target.value)} />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Water Rates</label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+              <input type="number" className={`${inputCls} pl-7 pr-10`} value={waterRates} onChange={(e) => setWaterRates(e.target.value)} />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Landlord Insurance</label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+              <input type="number" className={`${inputCls} pl-7 pr-10`} value={insuranceAmt} onChange={(e) => setInsuranceAmt(e.target.value)} />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Maintenance &amp; Repairs</label>
+            <div className="flex gap-2 items-center">
+              <div className="relative flex-1">
+                <input type="number" step="0.1" className={`${inputCls} pr-8`} value={maintenancePct} onChange={(e) => setMaintenancePct(e.target.value)} />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
+              </div>
+              <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">{purchasePrice > 0 ? formatCurrency(annualMaintenance) + '/yr' : '—'}</span>
+            </div>
+          </div>
+          {isUnitOrTownhouse && (
+            <div>
+              <label className={labelCls}>Strata / Body Corporate</label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+                <input type="number" className={`${inputCls} pl-7 pr-10`} value={strataFees} onChange={(e) => setStrataFees(e.target.value)} />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -525,20 +660,56 @@ function PredictorTab() {
                 {salary > 0 && <p className="text-xs text-indigo-600 font-semibold mt-2">↳ {getMarginalRateLabel(salary)}</p>}
               </div>
             )}
+            {structure === 'trust' && (
+              <>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+                  <strong>Discretionary Trust:</strong> Losses stay inside trust — no negative gearing benefit. Profits distributed at beneficiary marginal rates. CGT 50% discount passes through to individual beneficiaries.
+                  {(state === 'NSW' || state === 'VIC') && <span className="ml-1 font-semibold">Stamp duty surcharge applies in {state}.</span>}
+                </div>
+                <div>
+                  <label className={labelCls}>Beneficiary Marginal Rate (for distribution modelling)</label>
+                  <div className="relative">
+                    <input type="number" className={`${inputCls} pr-8`} value={trustBeneficiaryRate} onChange={(e) => setTrustBeneficiaryRate(e.target.value)} />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
+                  </div>
+                </div>
+              </>
+            )}
             {structure === 'company' && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-                <strong>Company (Pty Ltd):</strong> 25% flat tax. Losses carried forward — no negative gearing. No CGT 50% discount on sale.
-              </div>
+              <>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+                  <strong>Company (Pty Ltd):</strong> Losses carried forward — no negative gearing. No CGT 50% discount on sale.
+                </div>
+                <div>
+                  <label className={labelCls}>Company Tax Rate</label>
+                  <div className="flex gap-2">
+                    {([25, 30] as const).map((r) => (
+                      <button key={r} onClick={() => setCompanyTaxRate(r)}
+                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${companyTaxRate === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
+                        {r}% {r === 25 ? '(Base Rate)' : '(Standard)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
             {structure === 'smsf' && (
-              <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-xs text-sky-800">
-                <strong>SMSF:</strong> 15% on net rental (accumulation phase), 0% in pension phase. Must use LRBA. CGT 10% after 12 months.
-              </div>
-            )}
-            {structure === 'trust' && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-                <strong>Discretionary Trust:</strong> No tax benefit modelled — losses stay inside the trust. Profits distributed at beneficiary marginal rates. CGT 50% discount passes through to individual beneficiaries.
-              </div>
+              <>
+                <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-xs text-sky-800">
+                  <strong>SMSF:</strong> Must use LRBA (limited recourse borrowing arrangement). CGT: 10% accumulation / 0% pension after 12 months.
+                </div>
+                <div>
+                  <label className={labelCls}>SMSF Phase</label>
+                  <div className="flex gap-2">
+                    {(['accumulation', 'pension'] as const).map((p) => (
+                      <button key={p} onClick={() => setSmsfPhase(p)}
+                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all capitalize ${smsfPhase === p ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200 hover:border-sky-300'}`}>
+                        {p === 'accumulation' ? 'Accumulation (15%)' : 'Pension (0%)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -560,7 +731,10 @@ function PredictorTab() {
           {showCosts && (
             <div className="px-5 pb-5 border-t border-slate-100 pt-4 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-slate-500">Purchase Price</span><span className="font-semibold">{formatCurrency(purchasePrice)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Stamp Duty ({state})</span><span className="font-bold text-orange-600">{formatCurrency(stampDuty)}</span></div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Stamp Duty ({state}){structure === 'trust' && (state === 'NSW' || state === 'VIC') ? <span className="ml-1 text-orange-500 text-xs">+ trust surcharge</span> : ''}</span>
+                <span className="font-bold text-orange-600">{formatCurrency(stampDuty)}</span>
+              </div>
               {lmi > 0 && <div className="flex justify-between"><span className="text-slate-500">LMI — LVR {lvr.toFixed(0)}%</span><span className="font-bold text-red-600">{formatCurrency(lmi)}</span></div>}
               <div className="flex justify-between"><span className="text-slate-500">Conveyancing (~0.2%)</span><span>{formatCurrency(conveyancing)}</span></div>
               <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
@@ -570,15 +744,37 @@ function PredictorTab() {
 
               <div className="pt-3 mt-2 border-t border-slate-100 space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 pb-1">Annual Ongoing (Tax Calc)</p>
-                <div className="flex justify-between"><span className="text-slate-500">Interest (IO)</span><span>{formatCurrency(annualInterest)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">PM Fees (~8%)</span><span>{formatCurrency(annualMgmtFees)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Interest ({repaymentType.toUpperCase()})</span><span>{formatCurrency(annualInterest)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">PM Fees ({pmFeeRate}%)</span><span>{formatCurrency(annualPmFees)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Letting Fee (1 wk)</span><span>{formatCurrency(lettingFee)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Council Rates</span><span>{formatCurrency(annualCouncilRates)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Water Rates</span><span>{formatCurrency(annualWaterRates)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Landlord Insurance</span><span>{formatCurrency(annualInsurance)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Maintenance ({maintenanceRate}%)</span><span>{formatCurrency(annualMaintenance)}</span></div>
+                {isUnitOrTownhouse && <div className="flex justify-between"><span className="text-slate-500">Strata / Body Corp</span><span>{formatCurrency(annualStrata)}</span></div>}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">{state} Land Tax (est. {formatCurrency(estimatedLandValue)} land)</span>
+                  <span className="text-slate-500">
+                    {state} Land Tax
+                    <button className="ml-1.5 text-slate-400 hover:text-slate-600 text-[10px] underline" onClick={() => setLandValuePct(landValuePct)}>
+                      (est. {landValPct}% = {formatCurrency(estimatedLandValue)})
+                    </button>
+                  </span>
                   <span className={annualLandTax > 0 ? 'font-semibold text-orange-600' : 'text-slate-400 text-xs'}>
-                    {state === 'ACT' ? 'In general rates' : state === 'NT' ? 'No land tax' : annualLandTax > 0 ? formatCurrency(annualLandTax) : `Below ${landTaxThresholdLabel(structure, state)}`}
+                    {state === 'NT' ? 'No land tax' : annualLandTax > 0 ? formatCurrency(annualLandTax) : `Below ${landTaxThresholdLabel(structure, state)}`}
                   </span>
                 </div>
+                {/* Land value % edit */}
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-slate-400 shrink-0">Land value %:</span>
+                  <div className="relative flex-1">
+                    <input type="number" step="1" className="w-full border border-slate-200 rounded-lg px-3 py-1 text-xs text-slate-700 focus:outline-none focus:border-violet-400" value={landValuePct} onChange={(e) => setLandValuePct(e.target.value)} />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                  </div>
+                </div>
+                <div className="flex justify-between"><span className="text-slate-500">Vacancy Allowance (2.6%)</span><span className="text-red-500">−{formatCurrency(vacancyAllowance)}</span></div>
+                {depreciationEnabled && totalDepreciation > 0 && (
+                  <div className="flex justify-between"><span className="text-slate-500">Depreciation (Div 43+40)</span><span className="text-indigo-600">{formatCurrency(totalDepreciation)}</span></div>
+                )}
                 <div className="flex justify-between border-t border-slate-200 pt-2 font-bold">
                   <span>Net Rental for Tax</span>
                   <span className={netRentalForTax >= 0 ? 'text-emerald-600' : 'text-red-600'}>
@@ -591,52 +787,127 @@ function PredictorTab() {
         </div>
       )}
 
-      {/* Live Metric Cards */}
+      {/* Depreciation (optional) */}
+      {purchasePrice > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <button className="w-full px-5 py-4 flex items-center gap-3 hover:bg-slate-50 transition-colors" onClick={() => setShowDepreciation(v => !v)}>
+            <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+              <Calculator className="w-4 h-4 text-purple-600" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Optional</p>
+              <h3 className="text-sm font-bold text-slate-800">Depreciation {depreciationEnabled ? <span className="text-purple-600 font-normal">— {formatCurrency(totalDepreciation)}/yr</span> : <span className="text-slate-400 font-normal">(off)</span>}</h3>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showDepreciation ? 'rotate-180' : ''}`} />
+          </button>
+          {showDepreciation && (
+            <div className="px-5 pb-5 border-t border-slate-100 pt-4 space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className={`w-10 h-6 rounded-full transition-colors ${depreciationEnabled ? 'bg-purple-600' : 'bg-slate-300'} relative`} onClick={() => setDepreciationEnabled(v => !v)}>
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${depreciationEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                </div>
+                <span className="text-sm font-medium text-slate-700">Include depreciation in tax calc</span>
+              </label>
+              {depreciationEnabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Construction Cost % (Div 43)</label>
+                    <div className="relative">
+                      <input type="number" step="1" className={`${inputCls} pr-8`} placeholder={String(defaultBuildCostPct)} value={buildingCostPct} onChange={(e) => setBuildingCostPct(e.target.value)} />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Div 43 @ 2.5%/yr = {formatCurrency(divFortyThree)}/yr</p>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Plant & Equipment (Div 40)</label>
+                    <select className={inputCls} value={plantEquipment} onChange={(e) => setPlantEquipment(e.target.value as 'new' | 'pre2017' | 'post2017')}>
+                      <option value="new">New property (~$8,000/yr)</option>
+                      <option value="pre2017">Established pre-2017 (~$3,000/yr)</option>
+                      <option value="post2017">Established post-2017 ($0 — not available)</option>
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">Div 40 = {formatCurrency(divForty)}/yr</p>
+                  </div>
+                  <div className="sm:col-span-2 bg-purple-50 border border-purple-200 rounded-xl p-3 text-xs text-purple-800">
+                    Total depreciation: <strong>{formatCurrency(totalDepreciation)}/yr</strong> — applied to Individual tax calc only. Consult a quantity surveyor for accurate schedule.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sticky summary bar */}
       {hasCalcs && (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 shadow-lg px-4 py-3">
+          <div className="max-w-2xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: 'Loan Amount', value: formatCurrency(loanAmount), accent: 'border-l-slate-400', text: 'text-slate-900' },
-              { label: 'Monthly Repayment', value: formatCurrency(monthlyRepayment), accent: 'border-l-slate-400', text: 'text-slate-900' },
-              { label: 'Gross Yield', value: `${grossYield.toFixed(2)}%`, accent: grossYield >= 5 ? 'border-l-emerald-500' : grossYield >= 3.5 ? 'border-l-amber-400' : 'border-l-red-400', text: grossYield >= 5 ? 'text-emerald-700' : grossYield >= 3.5 ? 'text-amber-700' : 'text-red-600' },
-              { label: 'Pre-Tax Cashflow/mo', value: formatCurrency(monthlyCashflow), accent: monthlyCashflow >= 0 ? 'border-l-emerald-500' : 'border-l-red-400', text: monthlyCashflow >= 0 ? 'text-emerald-700' : 'text-red-600' },
+              { label: 'Loan', value: formatCurrency(loanAmount), color: 'text-slate-900' },
+              { label: repaymentType === 'io' ? 'Repayment (IO)' : 'Repayment (P&I)', value: formatCurrency(monthlyRepayment) + '/mo', color: 'text-slate-900' },
+              { label: 'Gross / Net Yield', value: `${grossYield.toFixed(1)}% / ${netYield.toFixed(1)}%`, color: grossYield >= 5 ? 'text-emerald-700' : grossYield >= 3.5 ? 'text-amber-700' : 'text-red-600' },
+              { label: 'After-Tax CF/mo', value: formatCurrency(afterTaxMonthlyCashflow), color: afterTaxMonthlyCashflow >= 0 ? 'text-emerald-700' : 'text-red-600' },
             ].map((s) => (
-              <div key={s.label} className={`bg-white rounded-2xl border border-slate-200 border-l-4 ${s.accent} p-4 shadow-sm`}>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1">{s.label}</p>
-                <p className={`text-lg font-black ${s.text}`}>{s.value}</p>
+              <div key={s.label} className="text-center">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{s.label}</p>
+                <p className={`text-xs sm:text-sm font-black ${s.color}`}>{s.value}</p>
               </div>
             ))}
           </div>
+        </div>
+      )}
 
-          {/* After-Tax Panel */}
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 text-white shadow-xl">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="w-4 h-4 text-indigo-400" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                After-Tax Summary — {structure === 'individual' ? 'Individual PAYG' : structure === 'trust' ? 'Discretionary Trust' : structure === 'company' ? 'Company 25%' : 'SMSF 15%'}
+      {/* After-Tax Panel */}
+      {hasCalcs && (
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 text-white shadow-xl">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-4 h-4 text-indigo-400" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              After-Tax Summary — {structure === 'individual' ? 'Individual PAYG' : structure === 'trust' ? 'Discretionary Trust' : structure === 'company' ? `Company ${companyTaxRate}%` : `SMSF ${smsfPhase === 'pension' ? '0%' : '15%'}`}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Tax Rate</p>
+              <p className="text-sm font-bold text-white leading-snug">{taxRateLabel || '—'}</p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">{annualTaxBenefit >= 0 ? 'Annual Tax Saving' : 'Annual Tax Cost'}</p>
+              <p className={`text-lg font-black ${annualTaxBenefit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {annualTaxBenefit !== 0 ? (annualTaxBenefit >= 0 ? '+' : '') + formatCurrency(Math.abs(annualTaxBenefit)) : '—'}
               </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Tax Rate</p>
-                <p className="text-sm font-bold text-white leading-snug">{taxRateLabel || `${(taxRate * 100).toFixed(0)}%`}</p>
-              </div>
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">{monthlyTaxBenefit >= 0 ? 'Monthly Tax Saving' : 'Monthly Tax Cost'}</p>
-                <p className={`text-xl font-black ${monthlyTaxBenefit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {monthlyTaxBenefit !== 0 ? (monthlyTaxBenefit >= 0 ? '+' : '') + formatCurrency(monthlyTaxBenefit) : '—'}
-                </p>
-              </div>
-              <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">After-Tax Cashflow/mo</p>
-                <p className={`text-2xl font-black ${afterTaxMonthlyCashflow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {formatCurrency(afterTaxMonthlyCashflow)}
-                </p>
-              </div>
+            <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">{monthlyTaxBenefit >= 0 ? 'Monthly Tax Saving' : 'Monthly Tax Cost'}</p>
+              <p className={`text-lg font-black ${monthlyTaxBenefit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {monthlyTaxBenefit !== 0 ? (monthlyTaxBenefit >= 0 ? '+' : '') + formatCurrency(Math.abs(monthlyTaxBenefit)) : '—'}
+              </p>
             </div>
-            {taxNote && <p className="text-xs text-slate-400 mt-4 pt-3 border-t border-white/10">{taxNote}</p>}
+            <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">After-Tax CF/mo</p>
+              <p className={`text-2xl font-black ${afterTaxMonthlyCashflow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatCurrency(afterTaxMonthlyCashflow)}
+              </p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Annual After-Tax CF</p>
+              <p className={`text-xl font-black ${afterTaxAnnualCashflow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {formatCurrency(afterTaxAnnualCashflow)}
+              </p>
+            </div>
+            <div className="bg-white/5 rounded-xl p-3 border border-white/10 sm:col-span-1">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">10-yr Equity Proj.</p>
+              <div className="flex items-center gap-1.5">
+                <p className={`text-lg font-black ${tenYearEquity >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(tenYearEquity)}</p>
+                <div className="flex items-center gap-0.5">
+                  <input type="number" step="0.5" className="w-12 bg-white/10 border border-white/20 rounded px-1.5 py-0.5 text-xs text-white text-center focus:outline-none" value={growthRate} onChange={(e) => setGrowthRate(e.target.value)} />
+                  <span className="text-xs text-slate-400">%/yr</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">{formatCurrency(futureValue)} value − {formatCurrency(outstandingBalance)} loan</p>
+            </div>
           </div>
-        </>
+          {taxNote && <p className="text-xs text-slate-400 mt-4 pt-3 border-t border-white/10">{taxNote}</p>}
+        </div>
       )}
 
       {/* AI CTA Button */}
@@ -722,14 +993,15 @@ function PredictorTab() {
           All figures are <strong>estimates only</strong> based on publicly available 2024-25 rates and are provided for indicative purposes. This tool does <strong>not</strong> constitute financial, tax, or legal advice. You should consult a <strong>registered tax agent or accountant</strong> (CPA/CA), a qualified property lawyer or conveyancer, and a licensed financial adviser before making any investment decision.
         </p>
         <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
-          <li><strong>Stamp duty / transfer duty:</strong> Rates and thresholds are indexed annually by each state revenue office. Concessions, surcharges (e.g. foreign purchaser: VIC 8%, NSW 8%, QLD 7%), and off-the-plan discounts are <em>not</em> included.</li>
-          <li><strong>Land tax:</strong> Land value is estimated at 30% of purchase price — actual unimproved capital value (UCV) set by the state valuer-general may differ significantly. VIC COVID debt levy (+0.1–0.2%) may apply Jan 2024 onwards for some landholdings.</li>
+          <li><strong>Stamp duty / transfer duty:</strong> Rates and thresholds are indexed annually. NSW/VIC trust surcharges included. Foreign purchaser surcharges, off-the-plan discounts and FHOG concessions are <em>not</em> included.</li>
+          <li><strong>Land tax:</strong> Land value estimated at {landValPct}% of purchase price — actual UCV set by the state valuer-general may differ significantly. NSW trust/company = no threshold (taxed from $1). VIC trust surcharge 0.5% applies.</li>
           <li><strong>Tax brackets:</strong> 2024-25 Stage 3 rates apply from 1 July 2024. Medicare Levy Surcharge, HECS/HELP repayments, and low-income offsets are not included.</li>
-          <li><strong>Deductions excluded:</strong> Depreciation (Div 43 building allowance &amp; Div 40 plant/equipment), body corporate fees, insurance, maintenance, water rates, and borrowing costs may all be deductible — a quantity surveyor&apos;s report is recommended.</li>
-          <li><strong>Trust / Company / SMSF:</strong> Structural decisions have significant legal, stamp duty, and ongoing compliance cost implications. The trust surcharge, company franking rules, and SMSF LRBA requirements are complex — specialist advice is essential.</li>
-          <li><strong>LMI:</strong> Estimated using indicative Helia/QBE tiered rates. Actual premiums vary by lender, loan purpose, and borrower profile.</li>
+          <li><strong>Depreciation:</strong> Div 40 plant/equipment unavailable for established properties acquired post-9 May 2017. Div 43 building allowance at 2.5%/yr (residential). A quantity surveyor&apos;s report is recommended.</li>
+          <li><strong>Trust / Company / SMSF:</strong> Structural decisions have significant legal and compliance implications. SMSF LRBA rules restrict borrowing structure. Specialist advice is essential.</li>
+          <li><strong>LMI:</strong> Estimated using indicative Helia/QBE tiered rates. Actual premiums vary by lender.</li>
+          <li><strong>10-yr equity:</strong> Growth rate assumption is illustrative only — past capital growth does not guarantee future performance.</li>
         </ul>
-        <p className="text-xs text-amber-700">Verify current rates directly with the relevant state revenue authority before transacting: QLD — qro.qld.gov.au | VIC — sro.vic.gov.au | NSW — revenue.nsw.gov.au | WA — revenue.wa.gov.au | SA — revenuesa.sa.gov.au | TAS — sro.tas.gov.au | ACT — revenue.act.gov.au</p>
+        <p className="text-xs text-amber-700">Verify current rates: QLD — qro.qld.gov.au | VIC — sro.vic.gov.au | NSW — revenue.nsw.gov.au | WA — revenue.wa.gov.au | SA — revenuesa.sa.gov.au | TAS — sro.tas.gov.au | ACT — revenue.act.gov.au</p>
       </div>
     </div>
   );
