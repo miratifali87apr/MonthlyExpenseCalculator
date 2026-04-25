@@ -15,7 +15,6 @@ function AuthCallbackInner() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const code = searchParams.get('code');
     const type = searchParams.get('type');
     const errorParam = searchParams.get('error');
     const redirectTo = type === 'recovery' ? '/auth/reset-password' : '/dashboard';
@@ -25,41 +24,29 @@ function AuthCallbackInner() {
       return;
     }
 
-    if (code) {
-      // PKCE flow: Supabase auto-exchanges the code (detectSessionInUrl=true).
-      // INITIAL_SESSION fires null while exchange is still in progress — ignore it.
-      // Only act on SIGNED_IN which fires after the exchange succeeds.
-      let done = false;
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (done) return;
-        if (event === 'SIGNED_IN' && session) {
-          done = true;
-          subscription.unsubscribe();
-          router.replace(redirectTo);
-        }
-      });
-
-      // Fallback: if SIGNED_IN never fires, exchange manually after 1s
-      const fallback = setTimeout(() => {
-        if (done) return;
-        supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-          if (done) return;
-          done = true;
-          subscription.unsubscribe();
-          router.replace(error ? '/login?error=callback_failed' : redirectTo);
-        });
-      }, 1500);
-
-      return () => {
-        clearTimeout(fallback);
+    // Implicit flow: Supabase detects the #access_token hash and fires SIGNED_IN.
+    // Wait for that event, then redirect.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
         subscription.unsubscribe();
-      };
-    }
-
-    // No code — check for existing session (e.g. already signed in or hash fragment)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      router.replace(session ? redirectTo : '/login');
+        router.replace(redirectTo);
+      } else if (event === 'INITIAL_SESSION' && session) {
+        subscription.unsubscribe();
+        router.replace(redirectTo);
+      }
     });
+
+    // Fallback: if no auth event fires within 5s, check session directly
+    const fallback = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      subscription.unsubscribe();
+      router.replace(session ? redirectTo : '/login');
+    }, 5000);
+
+    return () => {
+      clearTimeout(fallback);
+      subscription.unsubscribe();
+    };
   }, [router, searchParams]);
 
   return <Spinner />;
