@@ -93,46 +93,56 @@ describe('calcStampDuty — QLD', () => {
   });
 });
 
-describe('calcStampDuty — NSW (2025-26 CPI-indexed)', () => {
-  it('correct duty at $17k boundary', () => {
-    expect(round(calcStampDuty(17000, 'NSW'))).toBe(round(17000 * 0.0125)); // 212
+describe('calcStampDuty — NSW (spec brackets: $16k/$35k/$93k/$351k/$1.168M/$3.505M)', () => {
+  it('correct duty at $17k (straddles $16k boundary)', () => {
+    // 200 + (17000 - 16000) * 0.015 = 200 + 15 = 215
+    expect(round(calcStampDuty(17000, 'NSW'))).toBe(215);
   });
 
   it('correct duty at $500k', () => {
-    // 11152 + (500000 - 372000) * 0.045 = 11152 + 5760 = 16912
-    expect(round(calcStampDuty(500000, 'NSW'))).toBe(16912);
+    // 10530 + (500000 - 351000) * 0.045 = 10530 + 6705 = 17235
+    expect(round(calcStampDuty(500000, 'NSW'))).toBe(17235);
   });
 
   it('correct duty at $1M', () => {
-    // 11152 + (1000000 - 372000) * 0.045 = 11152 + 28260 = 39412
-    expect(round(calcStampDuty(1000000, 'NSW'))).toBe(39412);
+    // 10530 + (1000000 - 351000) * 0.045 = 10530 + 29205 = 39735
+    expect(round(calcStampDuty(1000000, 'NSW'))).toBe(39735);
   });
 
-  it('correct duty at $2M (above $1.24M threshold)', () => {
-    // 50212 + (2000000 - 1240000) * 0.055 = 50212 + 41800 = 92012
-    expect(round(calcStampDuty(2000000, 'NSW'))).toBe(92012);
+  it('correct duty at $2M (above $1.168M threshold)', () => {
+    // 47295 + (2000000 - 1168000) * 0.055 = 47295 + 45760 = 93055
+    expect(round(calcStampDuty(2000000, 'NSW'))).toBe(93055);
   });
 
-  it('correct duty at $4M (premium above $3.721M)', () => {
-    // 186667 + (4000000 - 3721000) * 0.07 = 186667 + 19530 = 206197
-    expect(round(calcStampDuty(4000000, 'NSW'))).toBe(206197);
+  it('correct duty at $4M (premium above $3.505M)', () => {
+    // 175830 + (4000000 - 3505000) * 0.07 = 175830 + 34650 = 210480
+    expect(round(calcStampDuty(4000000, 'NSW'))).toBe(210480);
+  });
+
+  it('NSW trust adds 0.5% surcharge on full price', () => {
+    const base = calcStampDuty(500000, 'NSW', 'individual');
+    const trust = calcStampDuty(500000, 'NSW', 'trust');
+    expect(round(trust - base)).toBe(2500); // 0.5% of $500k
   });
 });
 
 describe('calcStampDuty — VIC', () => {
-  it('flat 5.5% of total value for $960k-$2M', () => {
+  it('flat 5.5% of total value for $960k and above', () => {
     expect(calcStampDuty(1000000, 'VIC')).toBe(55000);
     expect(calcStampDuty(1500000, 'VIC')).toBe(82500);
-  });
-
-  it('correct duty just above $2M', () => {
-    // 110000 + (2100000 - 2000000) * 0.065 = 110000 + 6500 = 116500
-    expect(round(calcStampDuty(2100000, 'VIC'))).toBe(116500);
+    // At $2.1M: flat 5.5%
+    expect(round(calcStampDuty(2100000, 'VIC'))).toBe(115500);
   });
 
   it('correct duty at $500k (in the 6% bracket $130k-$960k)', () => {
     // 2870 + (500000 - 130000) * 0.06 = 2870 + 22200 = 25070
     expect(round(calcStampDuty(500000, 'VIC'))).toBe(25070);
+  });
+
+  it('VIC trust adds 1% surcharge on full price', () => {
+    const base = calcStampDuty(500000, 'VIC', 'individual');
+    const trust = calcStampDuty(500000, 'VIC', 'trust');
+    expect(round(trust - base)).toBe(5000); // 1% of $500k
   });
 });
 
@@ -154,8 +164,8 @@ describe('calcStampDuty — TAS', () => {
   });
 
   it('correct duty at $300k', () => {
-    // 5880 + (300000 - 200000) * 0.04 = 5880 + 4000 = 9880
-    expect(round(calcStampDuty(300000, 'TAS'))).toBe(9880);
+    // 5935 + (300000 - 200000) * 0.04 = 5935 + 4000 = 9935
+    expect(round(calcStampDuty(300000, 'TAS'))).toBe(9935);
   });
 });
 
@@ -167,18 +177,18 @@ describe('calcLandTax — QLD individual', () => {
     expect(calcLandTax(599999, 'individual', 'QLD')).toBe(0);
   });
 
-  it('correct tax at $800k (first bracket $600k-$1M, 1%)', () => {
-    // 500 + (800000 - 600000) * 0.01 = 500 + 2000 = 2500
-    expect(calcLandTax(800000, 'individual', 'QLD')).toBe(2500);
+  it('correct tax at $800k (1% × excess over $600k)', () => {
+    // (800000 - 600000) * 0.01 = 2000
+    expect(calcLandTax(800000, 'individual', 'QLD')).toBe(2000);
   });
 
-  it('correct tax at $2M (bracket $1M-$3M, 1.65%)', () => {
-    // 4500 + (2000000 - 1000000) * 0.0165 = 4500 + 16500 = 21000
-    expect(calcLandTax(2000000, 'individual', 'QLD')).toBe(21000);
+  it('correct tax at $2M (bracket $1M+, 1.65%)', () => {
+    // 4000 + (2000000 - 1000000) * 0.0165 = 4000 + 16500 = 20500
+    expect(calcLandTax(2000000, 'individual', 'QLD')).toBe(20500);
   });
 
   it('SMSF treated same as individual for QLD', () => {
-    expect(calcLandTax(800000, 'smsf', 'QLD')).toBe(2500);
+    expect(calcLandTax(800000, 'smsf', 'QLD')).toBe(2000);
   });
 });
 
@@ -188,122 +198,144 @@ describe('calcLandTax — QLD company/trust', () => {
     expect(calcLandTax(300000, 'company', 'QLD')).toBe(0);
   });
 
-  it('correct tax at $1M (bracket $350k-$2.25M, 1.7%)', () => {
-    // 1450 + (1000000 - 350000) * 0.017 = 1450 + 11050 = 12500
-    expect(calcLandTax(1000000, 'trust', 'QLD')).toBe(12500);
+  it('correct tax at $1M (bracket $350k-$2.25M, 1%)', () => {
+    // (1000000 - 350000) * 0.01 = 6500
+    expect(calcLandTax(1000000, 'trust', 'QLD')).toBe(6500);
   });
 
-  it('correct tax at $3M (bracket $2.25M-$5M, 1.5%)', () => {
-    // 33750 + (3000000 - 2250000) * 0.015 = 33750 + 11250 = 45000
-    expect(calcLandTax(3000000, 'company', 'QLD')).toBe(45000);
+  it('correct tax at $3M (bracket $2.25M+, 1.65%)', () => {
+    // 19000 + (3000000 - 2250000) * 0.0165 = 19000 + 12375 = 31375
+    expect(calcLandTax(3000000, 'company', 'QLD')).toBe(31375);
   });
 });
 
 describe('calcLandTax — VIC individual', () => {
-  it('returns 0 below $50k threshold', () => {
+  it('returns 0 at or below $300k threshold', () => {
     expect(calcLandTax(49999, 'individual', 'VIC')).toBe(0);
+    expect(calcLandTax(100000, 'individual', 'VIC')).toBe(0);
+    expect(calcLandTax(300000, 'individual', 'VIC')).toBe(0);
   });
 
-  it('returns flat $500 for $50k-$100k', () => {
-    expect(calcLandTax(50000, 'individual', 'VIC')).toBe(500);
-    expect(calcLandTax(99999, 'individual', 'VIC')).toBe(500);
+  it('correct tax at $500k (bracket $300k-$600k)', () => {
+    // 275 + (500000 - 300000) * 0.002 = 275 + 400 = 675
+    expect(calcLandTax(500000, 'individual', 'VIC')).toBe(675);
   });
 
-  it('returns flat $975 for $100k-$300k', () => {
-    expect(calcLandTax(100000, 'individual', 'VIC')).toBe(975);
-    expect(calcLandTax(299999, 'individual', 'VIC')).toBe(975);
+  it('correct tax at $1M (bracket $600k-$1M)', () => {
+    // 875 + (1000000 - 600000) * 0.005 = 875 + 2000 = 2875
+    expect(calcLandTax(1000000, 'individual', 'VIC')).toBe(2875);
   });
 
-  it('correct tax at $500k (bracket $300k-$600k, 0.3%)', () => {
-    // 1350 + (500000 - 300000) * 0.003 = 1350 + 600 = 1950
-    expect(calcLandTax(500000, 'individual', 'VIC')).toBe(1950);
+  it('correct tax at $2M (bracket $1M-$1.8M boundary → $1.8M-$3M)', () => {
+    // 13275 + (2000000 - 1800000) * 0.019 = 13275 + 3800 = 17075
+    expect(calcLandTax(2000000, 'individual', 'VIC')).toBe(17075);
   });
 });
 
-describe('calcLandTax — VIC trust (surcharge table)', () => {
-  it('returns 0 below $25k', () => {
-    expect(calcLandTax(24999, 'trust', 'VIC')).toBe(0);
+describe('calcLandTax — VIC trust (0.5% surcharge above $300k threshold)', () => {
+  it('returns 0 at or below $300k threshold (same threshold as individual)', () => {
+    expect(calcLandTax(300000, 'trust', 'VIC')).toBe(0);
   });
 
-  it('trust has lower threshold than individual (kicks in at $25k vs $50k)', () => {
-    expect(calcLandTax(30000, 'trust', 'VIC')).toBeGreaterThan(0);
-    expect(calcLandTax(30000, 'individual', 'VIC')).toBe(0);
-  });
-
-  it('trust pays more than individual on same land value', () => {
+  it('trust pays more than individual on same land value above $300k', () => {
     const landValue = 500000;
     expect(calcLandTax(landValue, 'trust', 'VIC')).toBeGreaterThan(
       calcLandTax(landValue, 'individual', 'VIC')
     );
   });
+
+  it('trust surcharge is 0.5% of taxable value (landValue - $300k)', () => {
+    const landValue = 600000;
+    const individual = calcLandTax(landValue, 'individual', 'VIC');
+    const trust = calcLandTax(landValue, 'trust', 'VIC');
+    // surcharge = (600000 - 300000) * 0.005 = 1500
+    expect(round(trust - individual)).toBe(1500);
+  });
 });
 
 describe('calcLandTax — NSW', () => {
-  it('returns 0 below $1,075,000 threshold', () => {
+  it('returns 0 below $1,075,000 threshold (individual)', () => {
     expect(calcLandTax(1000000, 'individual', 'NSW')).toBe(0);
     expect(calcLandTax(1075000, 'individual', 'NSW')).toBe(0);
   });
 
-  it('correct tax at $2M', () => {
+  it('correct tax at $2M (individual)', () => {
     // 100 + (2000000 - 1075000) * 0.016 = 100 + 14800 = 14900
     expect(calcLandTax(2000000, 'individual', 'NSW')).toBe(14900);
   });
 
-  it('correct premium tax above $6,571,000', () => {
+  it('correct premium tax above $6,571,000 (individual)', () => {
     // 88036 + (7000000 - 6571000) * 0.02 = 88036 + 8580 = 96616
     expect(round(calcLandTax(7000000, 'individual', 'NSW'))).toBe(96616);
   });
 
-  it('NSW does not vary by ownership structure', () => {
-    const lv = 2000000;
-    expect(calcLandTax(lv, 'individual', 'NSW')).toBe(calcLandTax(lv, 'trust', 'NSW'));
-    expect(calcLandTax(lv, 'individual', 'NSW')).toBe(calcLandTax(lv, 'company', 'NSW'));
+  it('NSW trust/company taxed from $1 (no threshold) at 1.6% flat', () => {
+    // trust at $2M: 2000000 * 0.016 = 32000
+    expect(calcLandTax(2000000, 'trust', 'NSW')).toBe(32000);
+    expect(calcLandTax(2000000, 'company', 'NSW')).toBe(32000);
+    // trust pays more than individual (no threshold vs $1.075M threshold)
+    expect(calcLandTax(2000000, 'trust', 'NSW')).toBeGreaterThan(calcLandTax(2000000, 'individual', 'NSW'));
   });
 });
 
 describe('calcLandTax — WA', () => {
-  it('returns 0 below $300k', () => {
+  it('returns 0 at or below $300k', () => {
     expect(calcLandTax(299999, 'individual', 'WA')).toBe(0);
+    expect(calcLandTax(300000, 'individual', 'WA')).toBe(0);
   });
 
-  it('returns flat $300 for $300k-$420k', () => {
-    expect(calcLandTax(300001, 'individual', 'WA')).toBe(300);
-    expect(calcLandTax(420000, 'individual', 'WA')).toBe(300);
+  it('starts at $300 base just above $300k', () => {
+    // 300 + (300001 - 300000) * 0.0009 = 300.0009 (approx $300)
+    expect(calcLandTax(300001, 'individual', 'WA')).toBeCloseTo(300, 0);
   });
 
   it('correct tax at $600k', () => {
-    // 300 + (600000 - 420000) * 0.0025 = 300 + 450 = 750
-    expect(calcLandTax(600000, 'individual', 'WA')).toBe(750);
+    // 300 + (600000 - 300000) * 0.0009 = 300 + 270 = 570
+    expect(calcLandTax(600000, 'individual', 'WA')).toBeCloseTo(570, 0);
+  });
+
+  it('correct tax at $1.5M (in $1M-$2.2M bracket)', () => {
+    // 930 + (1500000 - 1000000) * 0.0015 = 930 + 750 = 1680
+    expect(calcLandTax(1500000, 'individual', 'WA')).toBeCloseTo(1680, 0);
   });
 });
 
 describe('calcLandTax — TAS', () => {
-  it('returns 0 below $125k', () => {
-    expect(calcLandTax(124999, 'individual', 'TAS')).toBe(0);
+  it('returns 0 at or below $25k threshold', () => {
+    expect(calcLandTax(25000, 'individual', 'TAS')).toBe(0);
   });
 
-  it('correct tax at $300k', () => {
-    // 50 + (300000 - 125000) * 0.0045 = 50 + 787.50 = 837.50
-    expect(calcLandTax(300000, 'individual', 'TAS')).toBeCloseTo(837.50, 2);
+  it('correct tax at $200k (bracket $25k-$350k, 0.55%)', () => {
+    // (200000 - 25000) * 0.0055 = 175000 * 0.0055 = 962.50
+    expect(calcLandTax(200000, 'individual', 'TAS')).toBeCloseTo(962.50, 2);
   });
 
-  it('correct tax at $500k (boundary)', () => {
-    // 50 + (500000 - 125000) * 0.0045 = 50 + 1687.50 = 1737.50
-    expect(calcLandTax(500000, 'individual', 'TAS')).toBe(1737.50);
+  it('correct tax at $400k (above $350k, 1.25%)', () => {
+    // 1788 + (400000 - 350000) * 0.0125 = 1788 + 625 = 2413
+    expect(calcLandTax(400000, 'individual', 'TAS')).toBeCloseTo(2413, 0);
   });
 
-  it('correct tax at $600k (above $500k, 1.5% rate)', () => {
-    // 1737.50 + (600000 - 500000) * 0.015 = 1737.50 + 1500 = 3237.50
-    expect(calcLandTax(600000, 'individual', 'TAS')).toBe(3237.50);
+  it('trust pays 0.5% surcharge on land value', () => {
+    const lv = 400000;
+    const individual = calcLandTax(lv, 'individual', 'TAS');
+    const trust = calcLandTax(lv, 'trust', 'TAS');
+    // surcharge = 400000 * 0.005 = 2000
+    expect(round(trust - individual)).toBe(2000);
   });
 });
 
-describe('calcLandTax — ACT and NT', () => {
-  it('ACT returns 0 (uses general rates system, no separate land tax)', () => {
-    expect(calcLandTax(1000000, 'individual', 'ACT')).toBe(0);
-    expect(calcLandTax(5000000, 'trust', 'ACT')).toBe(0);
+describe('calcLandTax — ACT', () => {
+  it('ACT calculates land tax using AUV bracket system', () => {
+    // $0 land value → 0
+    expect(calcLandTax(0, 'individual', 'ACT')).toBe(0);
+    // $75k: 75000 * 0.0059 = 442.50
+    expect(calcLandTax(75000, 'individual', 'ACT')).toBeCloseTo(442.5, 1);
+    // Above $75k should be greater
+    expect(calcLandTax(200000, 'individual', 'ACT')).toBeGreaterThan(calcLandTax(75000, 'individual', 'ACT'));
   });
+});
 
+describe('calcLandTax — NT', () => {
   it('NT returns 0 (no land tax)', () => {
     expect(calcLandTax(1000000, 'individual', 'NT')).toBe(0);
     expect(calcLandTax(5000000, 'company', 'NT')).toBe(0);
@@ -325,7 +357,7 @@ describe('stamp duty — all states return positive values for typical property 
 
 describe('land tax — bracket continuity (no sudden drops between brackets)', () => {
   it('QLD individual tax is strictly increasing', () => {
-    const vals = [600001, 800000, 1000001, 2000000, 3000001, 5000001, 10000001];
+    const vals = [600001, 800000, 1000001, 2000000, 3000001];
     for (let i = 1; i < vals.length; i++) {
       expect(calcLandTax(vals[i], 'individual', 'QLD')).toBeGreaterThan(
         calcLandTax(vals[i - 1], 'individual', 'QLD')
@@ -343,7 +375,7 @@ describe('land tax — bracket continuity (no sudden drops between brackets)', (
   });
 
   it('VIC individual tax is non-decreasing', () => {
-    const vals = [50000, 100000, 300000, 600000, 1000000, 1800000, 3000000];
+    const vals = [300001, 600000, 1000000, 1800000, 3000000];
     for (let i = 1; i < vals.length; i++) {
       expect(calcLandTax(vals[i], 'individual', 'VIC')).toBeGreaterThanOrEqual(
         calcLandTax(vals[i - 1], 'individual', 'VIC')
