@@ -20,7 +20,8 @@ function AuthCallbackInner() {
     const redirectTo = type === 'recovery' ? '/auth/reset-password' : '/dashboard';
 
     if (errorParam) {
-      router.replace('/login?error=callback_failed');
+      const desc = searchParams.get('error_description') || searchParams.get('error_code') || errorParam;
+      router.replace(`/login?error=${encodeURIComponent(desc)}`);
       return;
     }
 

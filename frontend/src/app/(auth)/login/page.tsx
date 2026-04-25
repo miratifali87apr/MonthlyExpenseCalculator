@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -49,8 +49,9 @@ const GitHubIcon = () => (
   </svg>
 );
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,6 +60,11 @@ export default function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err) setError(`Auth error: ${decodeURIComponent(err)}`);
+  }, [searchParams]);
 
   async function handleForgotPassword() {
     if (!email) { setError('Enter your email address first, then click Forgot password.'); return; }
@@ -219,5 +225,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }
