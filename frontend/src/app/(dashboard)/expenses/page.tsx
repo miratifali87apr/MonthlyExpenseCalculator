@@ -17,7 +17,7 @@ import {
 } from '@/lib/utils';
 import { ExpenseItem, Category, PaymentStatus } from '@/types';
 import dayjs from 'dayjs';
-import { ChevronUp, ChevronDown, ChevronsUpDown, Plus, X, Download, Trash2, CheckSquare } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, Plus, X, Download, Trash2, CheckSquare, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { propertiesApi } from '@/lib/api';
 import type { Property } from '@/types';
@@ -107,6 +107,100 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
         <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" loading={saving} onClick={handleSave}>Save Expense</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditExpenseModal({ expense, onClose, onSaved, properties }: { expense: ExpenseItem; onClose: () => void; onSaved: () => void; properties: Property[] }) {
+  const [form, setForm] = useState({
+    name: expense.name,
+    category: expense.category,
+    amount: String(expense.amount),
+    due_date: dayjs(expense.due_date).format('YYYY-MM-DD'),
+    status: expense.status,
+    property_id: expense.property_id ? String(expense.property_id) : '',
+    notes: expense.notes ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })); }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.amount) { setError('Name and amount are required.'); return; }
+    setSaving(true); setError('');
+    try {
+      await expensesApi.update(expense.id, {
+        name: form.name.trim(),
+        category: form.category as Category,
+        amount: parseFloat(form.amount),
+        due_date: new Date(form.due_date).toISOString(),
+        status: form.status as PaymentStatus,
+        property_id: form.property_id ? parseInt(form.property_id) : undefined,
+        notes: form.notes.trim() || undefined,
+      });
+      onSaved(); onClose();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to save.'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h2 className="font-bold text-slate-900">Edit Expense</h2>
+          <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Expense Name *</label>
+            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.name} onChange={e => update('name', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($) *</label>
+              <input type="number" step="0.01" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.amount} onChange={e => update('amount', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Due Date *</label>
+              <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.due_date} onChange={e => update('due_date', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+              <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.category} onChange={e => update('category', e.target.value)}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+              <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.status} onChange={e => update('status', e.target.value)}>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
+                <option value="funded">Reserved</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Property</label>
+            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.property_id} onChange={e => update('property_id', e.target.value)}>
+              <option value="">No property (personal)</option>
+              {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
+            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="Optional" value={form.notes} onChange={e => update('notes', e.target.value)} />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>Save Changes</Button>
         </div>
       </div>
     </div>
@@ -213,6 +307,7 @@ export default function ExpensesPage() {
   const [category, setCategory] = useState<string>('');
   const [actionId, setActionId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [editExpense, setEditExpense] = useState<ExpenseItem | null>(null);
   const [partialPayExpense, setPartialPayExpense] = useState<ExpenseItem | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('due_date');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -361,6 +456,14 @@ export default function ExpensesPage() {
           onSaved={() => { queryClient.invalidateQueries({ queryKey }); toast.success('Expense added'); }}
         />
       )}
+      {editExpense && (
+        <EditExpenseModal
+          expense={editExpense}
+          properties={properties}
+          onClose={() => setEditExpense(null)}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey }); toast.success('Expense updated'); }}
+        />
+      )}
       {partialPayExpense && (
         <PartialPayModal
           expense={partialPayExpense}
@@ -480,6 +583,7 @@ export default function ExpensesPage() {
                           </Button>
                         </>
                       )}
+                      <Button variant="ghost" size="sm" onClick={() => setEditExpense(item)}><Pencil size={13} /></Button>
                       <Button variant="danger" size="sm" loading={actionId === item.id} onClick={() => handleDelete(item.id)}>Del</Button>
                     </div>
                   </div>
@@ -623,16 +727,14 @@ export default function ExpensesPage() {
                               </Button>
                               <Button variant="info" size="sm" loading={actionId === item.id}
                                 onClick={async () => { setActionId(item.id); try { await expensesApi.fund(item.id); await invalidate(); } finally { setActionId(null); } }}>
-                                Funded
+                                Reserve
                               </Button>
                             </>
                           )}
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            loading={actionId === item.id}
-                            onClick={() => handleDelete(item.id)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => setEditExpense(item)}>
+                            <Pencil size={13} className="mr-1" /> Edit
+                          </Button>
+                          <Button variant="danger" size="sm" loading={actionId === item.id} onClick={() => handleDelete(item.id)}>
                             Delete
                           </Button>
                         </div>

@@ -22,11 +22,6 @@ import type { OwnershipStructure, AusState } from '@/lib/taxCalcs';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-const WEEKLY_RENT_MAP: Record<string, number> = {
-  Finley: 530,
-  Kirwan: 600,
-  Chigwell: 580,
-};
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -119,10 +114,10 @@ function PortfolioTab({ properties }: { properties: Property[] }) {
           loan_amount: p.loan_amount ?? null,
         })),
         holding_costs: [],
-        rental_income: Object.entries(WEEKLY_RENT_MAP).map(([name, weekly]) => ({
-          property: name,
-          weekly_rent: weekly,
-          annual_income: weekly * 52,
+        rental_income: properties.map((p) => ({
+          property: p.name,
+          weekly_rent: p.weekly_rent ?? 0,
+          annual_income: (p.weekly_rent ?? 0) * 52,
         })),
       };
 
@@ -1038,11 +1033,7 @@ function HoldingCostsTab({
         return sum + amt; // ad_hoc treated as monthly
       }, 0);
 
-      // Match property name to known weekly rents
-      const matchKey = Object.keys(WEEKLY_RENT_MAP).find((k) =>
-        prop.name.toLowerCase().includes(k.toLowerCase())
-      );
-      const weeklyRent = matchKey ? WEEKLY_RENT_MAP[matchKey] : 0;
+      const weeklyRent = Number(prop.weekly_rent) || 0;
       const monthlyRent = (weeklyRent * 52) / 12;
       const netOOP = Math.max(0, totalMonthly - monthlyRent);
 
