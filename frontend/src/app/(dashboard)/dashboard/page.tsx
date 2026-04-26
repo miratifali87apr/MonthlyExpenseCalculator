@@ -13,7 +13,7 @@ import { formatCurrency, formatDate, formatMonth } from '@/lib/utils';
 import type { ExpenseItem, IncomeItem } from '@/types';
 import Link from 'next/link';
 import { useState } from 'react';
-import { AlertTriangle, Home, RefreshCw, TrendingUp, Sparkles, ChevronRight, ArrowRight } from 'lucide-react';
+import { AlertTriangle, Home, RefreshCw, TrendingUp, Sparkles, ChevronRight, ArrowRight, TrendingDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function DashboardPage() {
@@ -200,24 +200,32 @@ export default function DashboardPage() {
     );
   }
 
+  const currentMonth = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+
   return (
     <div className="space-y-4">
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-3 gap-2 md:gap-3">
-        <div className="bg-white rounded-xl border border-slate-200 p-3 md:p-4 shadow-sm">
-          <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase tracking-wide">Income</p>
-          <p className="text-lg md:text-2xl font-bold text-green-600 mt-1">{formatCurrency(data.total_monthly_income)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-3 md:p-4 shadow-sm">
-          <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase tracking-wide">Expenses</p>
-          <p className="text-lg md:text-2xl font-bold text-red-600 mt-1">{formatCurrency(data.total_monthly_expenses)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-3 md:p-4 shadow-sm">
-          <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase tracking-wide">Net</p>
-          <p className={`text-lg md:text-2xl font-bold mt-1 ${netPositive ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(data.net_cashflow)}
+      {/* Hero Metric */}
+      <div className={`rounded-2xl p-5 md:p-7 ${netPositive ? 'bg-gradient-to-br from-green-600 to-green-700' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
+        <p className="text-sm font-medium text-white/70 mb-1">{currentMonth} — Net Cashflow</p>
+        <div className="flex items-end gap-3 mb-4">
+          <p className="text-4xl md:text-5xl font-bold text-white tracking-tight">
+            {formatCurrency(Math.abs(data.net_cashflow))}
           </p>
+          <div className={`flex items-center gap-1 mb-1 px-2.5 py-1 rounded-full text-xs font-semibold ${netPositive ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'}`}>
+            {netPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {netPositive ? 'Ahead' : 'Behind'}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white/10 rounded-xl px-4 py-3">
+            <p className="text-xs text-white/60 font-medium mb-0.5">Total Income</p>
+            <p className="text-lg font-bold text-white">{formatCurrency(data.total_monthly_income)}</p>
+          </div>
+          <div className="bg-white/10 rounded-xl px-4 py-3">
+            <p className="text-xs text-white/60 font-medium mb-0.5">Total Bills</p>
+            <p className="text-lg font-bold text-white">{formatCurrency(data.total_monthly_expenses)}</p>
+          </div>
         </div>
       </div>
 
@@ -227,7 +235,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between px-4 py-3 bg-amber-100 border-b border-amber-200">
             <div className="flex items-center gap-2">
               <AlertTriangle size={16} className="text-amber-600 shrink-0" />
-              <span className="font-bold text-amber-900 text-sm">Needs Funding — Next {data.next_unfunded.length}</span>
+              <span className="font-bold text-amber-900 text-sm">Needs Attention — {data.next_unfunded.length} upcoming</span>
             </div>
             <div className="text-right">
               <span className="text-xs text-amber-700">Total</span>
@@ -246,7 +254,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="font-bold text-slate-900">{formatCurrency(item.amount)}</span>
                   <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => handleFund(item.id)}>
-                    Fund
+                    Reserve
                   </Button>
                   <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => handleMarkPaid(item.id)}>
                     Paid
@@ -310,7 +318,7 @@ export default function DashboardPage() {
                       {formatCurrency(item.amount)}
                     </span>
                     {item.status === 'funded' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Funded</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Reserved</span>
                     ) : item.status === 'paid' ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Paid</span>
                     ) : (
@@ -346,7 +354,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="font-semibold text-sm text-red-700">{formatCurrency(item.amount)}</span>
-                  <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => handleFund(item.id)}>Fund</Button>
+                  <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => handleFund(item.id)}>Reserve</Button>
                   <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => handleMarkPaid(item.id)}>Paid</Button>
                 </div>
               </div>

@@ -126,6 +126,18 @@ function LoginPageInner() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Finance Tracker</h1>
           <p className="text-slate-400 mt-2 text-sm">Property & personal finance management</p>
+          <div className="mt-5 flex flex-col gap-2 text-left max-w-xs mx-auto">
+            {[
+              { icon: '🏠', text: 'Track every property bill automatically' },
+              { icon: '📊', text: 'Know your cashflow at a glance' },
+              { icon: '🤖', text: 'Upload PM statements — AI extracts the data' },
+            ].map(({ icon, text }) => (
+              <div key={text} className="flex items-center gap-2.5 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                <span className="text-base">{icon}</span>
+                <span className="text-sm text-slate-300">{text}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">

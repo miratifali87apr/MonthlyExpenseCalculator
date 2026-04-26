@@ -6,12 +6,12 @@ import { LayoutDashboard, CreditCard, TrendingUp, Home, RefreshCw, Sparkles, Log
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/dashboard',  label: 'Home',      icon: LayoutDashboard },
-  { href: '/expenses',   label: 'Expenses',  icon: CreditCard },
-  { href: '/income',     label: 'Income',    icon: TrendingUp },
-  { href: '/properties', label: 'Property',  icon: Home },
-  { href: '/recurring',  label: 'Recurring', icon: RefreshCw },
-  { href: '/insights',   label: 'AI',        icon: Sparkles },
+  { href: '/dashboard',  label: 'Overview',   icon: LayoutDashboard },
+  { href: '/expenses',   label: 'Bills',      icon: CreditCard },
+  { href: '/income',     label: 'Income',     icon: TrendingUp },
+  { href: '/properties', label: 'Properties', icon: Home },
+  { href: '/recurring',  label: 'Auto Bills', icon: RefreshCw },
+  { href: '/insights',   label: 'Insights',   icon: Sparkles },
 ];
 
 interface MobileNavProps {

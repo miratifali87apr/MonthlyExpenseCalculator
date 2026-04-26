@@ -23,12 +23,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/expenses', label: 'Expenses', icon: CreditCard },
+  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { href: '/expenses', label: 'Bills & Payments', icon: CreditCard },
   { href: '/income', label: 'Income', icon: TrendingUp },
-  { href: '/properties', label: 'Properties', icon: Home },
-  { href: '/recurring', label: 'Recurring', icon: RefreshCw },
-  { href: '/insights', label: 'AI Insights', icon: Sparkles },
+  { href: '/properties', label: 'My Properties', icon: Home },
+  { href: '/recurring', label: 'Auto Bills', icon: RefreshCw },
+  { href: '/insights', label: 'Insights', icon: Sparkles },
 ];
 
 interface SidebarProps {

@@ -9,11 +9,12 @@ import { expensesApi } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 
 const PAGE_TITLES: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/expenses': 'Expenses',
+  '/dashboard': 'Overview',
+  '/expenses': 'Bills & Payments',
   '/income': 'Income',
-  '/properties': 'Properties',
-  '/recurring': 'Recurring Templates',
+  '/properties': 'My Properties',
+  '/recurring': 'Auto Bills',
+  '/insights': 'Insights',
 };
 
 type AlertState = {
@@ -84,7 +85,7 @@ export function Header() {
             className="gap-1.5"
           >
             <Zap size={14} />
-            <span className="hidden md:inline">Generate Bills</span>
+            <span className="hidden md:inline">Sync Bills</span>
           </Button>
         </div>
       </div>
