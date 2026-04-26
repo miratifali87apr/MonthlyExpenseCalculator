@@ -13,7 +13,7 @@ import { formatCurrency, formatDate, formatMonth } from '@/lib/utils';
 import type { ExpenseItem, IncomeItem } from '@/types';
 import Link from 'next/link';
 import { useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Home, RefreshCw, TrendingUp, Sparkles, ChevronRight, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function DashboardPage() {
@@ -89,26 +89,111 @@ export default function DashboardPage() {
   const totalUnfunded = data.next_unfunded.reduce((s, i) => s + i.amount, 0);
 
   if (isEmpty) {
+    const steps = [
+      {
+        num: 1,
+        icon: <Home className="w-5 h-5 text-slate-700" />,
+        label: 'Start here',
+        labelColor: 'bg-slate-800 text-white',
+        title: 'Add your first property',
+        desc: 'Everything connects to a property — your mortgage, insurance, rates, rental income, and cashflow analysis all live here.',
+        cta: 'Add Property',
+        href: '/properties',
+        ctaStyle: 'bg-slate-800 hover:bg-slate-700 text-white',
+        cardStyle: 'border-slate-300 bg-white ring-2 ring-slate-800/10',
+      },
+      {
+        num: 2,
+        icon: <RefreshCw className="w-5 h-5 text-blue-600" />,
+        label: 'Step 2',
+        labelColor: 'bg-blue-100 text-blue-700',
+        title: 'Set up your recurring bills',
+        desc: 'Add your regular bills once — mortgage, insurance, council rates — and we\'ll auto-generate them every month so you never miss one.',
+        cta: 'Set Up Recurring Bills',
+        href: '/recurring',
+        ctaStyle: 'bg-blue-600 hover:bg-blue-700 text-white',
+        cardStyle: 'border-slate-200 bg-white',
+      },
+      {
+        num: 3,
+        icon: <TrendingUp className="w-5 h-5 text-green-600" />,
+        label: 'Step 3',
+        labelColor: 'bg-green-100 text-green-700',
+        title: 'Add your income',
+        desc: 'Add your salary, rental income, or other earnings. Your dashboard will show real cashflow — what\'s coming in vs going out.',
+        cta: 'Add Income',
+        href: '/income',
+        ctaStyle: 'bg-green-600 hover:bg-green-700 text-white',
+        cardStyle: 'border-slate-200 bg-white',
+      },
+      {
+        num: 4,
+        icon: <Sparkles className="w-5 h-5 text-purple-600" />,
+        label: 'Optional',
+        labelColor: 'bg-purple-100 text-purple-700',
+        title: 'Explore AI Insights',
+        desc: 'Once your data is set up, get an AI analysis of your portfolio, model new property purchases, and see your holding costs.',
+        cta: 'View AI Insights',
+        href: '/insights',
+        ctaStyle: 'bg-purple-600 hover:bg-purple-700 text-white',
+        cardStyle: 'border-slate-200 bg-white',
+      },
+    ];
+
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-        <div className="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mb-6">
-          <svg className="w-10 h-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-          </svg>
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-slate-900 rounded-2xl mb-4">
+            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900">Welcome — let&apos;s get you set up</h2>
+          <p className="text-slate-500 mt-2 text-sm max-w-md mx-auto">
+            Follow these steps in order. It takes about 5 minutes and your dashboard will be fully live.
+          </p>
         </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Welcome to Finance Tracker</h2>
-        <p className="text-slate-500 max-w-sm mb-8">
-          Your dashboard is empty. Start by adding your income, expenses, or a property to see your cashflow.
-        </p>
-        <div className="flex flex-wrap gap-3 justify-center">
-          <Link href="/income" className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition-colors shadow-sm">
-            + Add Income
-          </Link>
-          <Link href="/expenses" className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 transition-colors shadow-sm">
-            + Add Expense
-          </Link>
-          <Link href="/properties" className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 transition-colors shadow-sm">
-            + Add Property
+
+        {/* Steps */}
+        <div className="space-y-3">
+          {steps.map((step, i) => (
+            <div key={step.num} className={`relative rounded-xl border p-5 transition-shadow hover:shadow-md ${step.cardStyle}`}>
+              {/* Connector line */}
+              {i < steps.length - 1 && (
+                <div className="absolute left-[2.35rem] -bottom-3 w-px h-3 bg-slate-200 z-10" />
+              )}
+              <div className="flex items-start gap-4">
+                {/* Icon circle */}
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+                  {step.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${step.labelColor}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                  <h3 className="font-semibold text-slate-900 text-base">{step.title}</h3>
+                  <p className="text-sm text-slate-500 mt-1 leading-relaxed">{step.desc}</p>
+                  <Link
+                    href={step.href}
+                    className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${step.ctaStyle}`}
+                  >
+                    {step.cta}
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Personal use divider */}
+        <div className="mt-8 pt-6 border-t border-slate-200 text-center">
+          <p className="text-xs text-slate-400 mb-3">Not a property investor? Track personal bills instead</p>
+          <Link href="/expenses" className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">
+            Go to Expenses <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
       </div>
