@@ -1,3 +1,10 @@
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  plan: 'free' | 'pro';
+}
+
 export type Category =
   | 'loan' | 'insurance' | 'utility' | 'council_rates'
   | 'bas' | 'school_fees' | 'credit_card' | 'car'

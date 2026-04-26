@@ -99,12 +99,21 @@ def _parse_json(raw: str) -> dict:
         raise HTTPException(status_code=502, detail=f"AI returned non-JSON: {raw[:300]}")
 
 
+def _require_pro(user: models.User):
+    if (user.plan or 'free') != 'pro':
+        raise HTTPException(
+            status_code=403,
+            detail="This feature requires a Pro plan. Upgrade at /pricing."
+        )
+
+
 @router.post("/parse-statement")
 async def parse_statement(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    _require_pro(current_user)
     content_type = file.content_type or "image/jpeg"
     raw_bytes = await file.read()
     b64 = base64.standard_b64encode(raw_bytes).decode("utf-8")
@@ -127,6 +136,7 @@ async def analyze_portfolio(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    _require_pro(current_user)
     prompt = (
         "You are an expert Australian property investment analyst. "
         f"Analyse this portfolio data and return ONLY valid JSON:\n{json.dumps(body, indent=2)}\n\n"
@@ -144,6 +154,7 @@ async def purchase_predictor(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    _require_pro(current_user)
     prompt = (
         "You are an expert Australian property investment analyst. "
         "Evaluate this potential purchase and return ONLY valid JSON:\n"

@@ -14,6 +14,7 @@ import {
   MapPin, Building2, Receipt, TrendingUp, Sparkles,
   AlertTriangle, ChevronDown, BarChart3, Calculator, Landmark,
 } from 'lucide-react';
+import { ProGate } from '@/components/ui/ProGate';
 import {
   calcStampDuty, calcLandTax, calcLMI, getMarginalRate, getMarginalRateLabel, landTaxThresholdLabel,
 } from '@/lib/taxCalcs';
@@ -1187,8 +1188,16 @@ export default function InsightsPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'portfolio' && <PortfolioTab properties={properties} />}
-      {activeTab === 'predictor' && <PredictorTab />}
+      {activeTab === 'portfolio' && (
+        <ProGate feature="AI Portfolio Analysis">
+          <PortfolioTab properties={properties} />
+        </ProGate>
+      )}
+      {activeTab === 'predictor' && (
+        <ProGate feature="AI Purchase Predictor">
+          <PredictorTab />
+        </ProGate>
+      )}
       {activeTab === 'holding' && (
         <HoldingCostsTab properties={properties} templates={templates} />
       )}

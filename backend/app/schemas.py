@@ -213,6 +213,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     name: str
+    plan: str = 'free'
 
 
 # ---------------------------------------------------------------------------

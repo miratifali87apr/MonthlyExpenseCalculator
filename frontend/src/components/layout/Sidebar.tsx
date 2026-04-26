@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { ProBadge } from '@/components/ui/ProGate';
+import { usePlan } from '@/hooks/usePlan';
 
 interface NavItem {
   href: string;
@@ -39,6 +41,7 @@ interface SidebarProps {
 export function Sidebar({ userEmail, userName }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isPro } = usePlan();
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -75,6 +78,7 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
             >
               <Icon size={18} className="shrink-0" />
               {item.label}
+              {item.href === '/insights' && !isPro && <ProBadge />}
             </Link>
           );
         })}
