@@ -107,6 +107,25 @@ def _require_pro(user: models.User):
         )
 
 
+def _pdf_to_png_b64(raw_bytes: bytes) -> str:
+    """Convert first page of a PDF to PNG and return as base64 string."""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        raise HTTPException(
+            status_code=422,
+            detail="PDF support requires pypdfium2. Please upload a JPG or PNG screenshot instead.",
+        )
+    pdf = pdfium.PdfDocument(raw_bytes)
+    page = pdf[0]
+    bitmap = page.render(scale=2)  # 2x scale for better OCR quality
+    pil_img = bitmap.to_pil()
+    import io as _io
+    buf = _io.BytesIO()
+    pil_img.save(buf, format="PNG")
+    return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+
+
 @router.post("/parse-statement")
 async def parse_statement(
     file: UploadFile = File(...),
@@ -116,18 +135,29 @@ async def parse_statement(
     _require_pro(current_user)
     content_type = file.content_type or "image/jpeg"
     raw_bytes = await file.read()
-    b64 = base64.standard_b64encode(raw_bytes).decode("utf-8")
+
+    # Convert PDF first page to PNG so the vision API can read it
+    is_pdf = (
+        content_type == "application/pdf"
+        or (file.filename or "").lower().endswith(".pdf")
+    )
+    if is_pdf:
+        b64 = _pdf_to_png_b64(raw_bytes)
+        media_type = "image/png"
+    else:
+        b64 = base64.standard_b64encode(raw_bytes).decode("utf-8")
+        media_type = content_type
 
     prompt = (
         "You are a property management statement parser. "
-        "Analyse this PM statement image and return ONLY valid JSON with these exact keys:\n"
+        "Analyse this PM statement and return ONLY valid JSON with these exact keys:\n"
         '{"property_address": string|null, "period": {"month": string, "year": string}|null, '
         '"gross_rent": number|null, "management_fee": number|null, "letting_fee": number|null, '
         '"maintenance_items": [{"description": string, "amount": number}], '
         '"total_expenses": number|null, "net_to_owner": number|null}\n'
         "All monetary amounts are positive numbers without $ signs. Use null if not present. JSON only."
     )
-    return _parse_json(_ai_vision(b64, content_type, prompt))
+    return _parse_json(_ai_vision(b64, media_type, prompt))
 
 
 @router.post("/analyze-portfolio")

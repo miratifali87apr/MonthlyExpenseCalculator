@@ -286,12 +286,12 @@ export default function PropertyDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <label className="cursor-pointer">
               <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors">
-                Choose File
+                Choose File (JPG, PNG or PDF)
               </span>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf,.pdf"
                 className="sr-only"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null;
