@@ -138,8 +138,8 @@ def get_dashboard_summary(
         db.query(models.ExpenseItem)
         .filter(
             models.ExpenseItem.user_id == current_user.id,
+            models.ExpenseItem.status.in_(["pending", "overdue"]),
             models.ExpenseItem.due_date < now,
-            models.ExpenseItem.status == "pending",
         )
         .order_by(models.ExpenseItem.due_date.desc())
         .all()
