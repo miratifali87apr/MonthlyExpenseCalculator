@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { propertiesApi, recurringApi } from '@/lib/api';
 import { formatCurrency, CATEGORY_LABELS } from '@/lib/utils';
 import type { Property, RecurringTemplate } from '@/types';
-import { ChevronRight, Droplets, Home as HomeIcon, Plus, X } from 'lucide-react';
+import { ChevronRight, Droplets, Home as HomeIcon, Plus, X, Upload } from 'lucide-react';
 
 function monthlyFromFreq(amount: number, freq: string): number {
   if (freq === 'weekly')      return amount * 52 / 12;
@@ -137,9 +137,17 @@ function PropertyCard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-slate-400">Tap to add PM statement details →</p>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-xs text-red-400 hover:text-red-600">
+        <div className="flex items-center justify-between mt-3 gap-2">
+          <button
+            onClick={onClick}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+          >
+            <Upload size={12} /> Upload PM Statement
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="text-xs text-red-400 hover:text-red-600 px-2 py-2"
+          >
             Delete
           </button>
         </div>

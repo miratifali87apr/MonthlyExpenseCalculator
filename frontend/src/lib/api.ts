@@ -155,6 +155,16 @@ export const propertiesApi = {
     request<PropertySummary>(`/api/properties/${id}/summary`),
 };
 
+// Export
+export const exportApi = {
+  taxYear: (fy: number) => request<{
+    financial_year: string;
+    expenses: Record<string, unknown>[];
+    income: Record<string, unknown>[];
+    summary: { total_income: number; total_expenses: number; total_paid: number; net: number };
+  }>(`/api/export/tax-year?fy=${fy}`),
+};
+
 // Recurring
 export const recurringApi = {
   list: () => request<RecurringTemplate[]>('/api/recurring'),

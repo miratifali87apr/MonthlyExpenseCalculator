@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
 from app import models
-from app.routers import auth, dashboard, expenses, income, properties, recurring, ai
+from app.routers import auth, dashboard, expenses, income, properties, recurring, ai, export, notify
 from app.config import settings
 
 models.Base.metadata.create_all(bind=engine)
@@ -28,6 +28,8 @@ app.include_router(income.router, prefix="/api/income", tags=["Income"])
 app.include_router(properties.router, prefix="/api/properties", tags=["Properties"])
 app.include_router(recurring.router, prefix="/api/recurring", tags=["Recurring"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
+app.include_router(export.router, prefix="/api/export", tags=["Export"])
+app.include_router(notify.router, prefix="/api/notify", tags=["Notifications"])
 
 
 @app.get("/health")

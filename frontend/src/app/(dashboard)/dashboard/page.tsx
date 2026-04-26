@@ -8,18 +8,62 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { DashboardSkeleton } from '@/components/ui/Skeleton';
-import { dashboardApi, expensesApi, recurringApi } from '@/lib/api';
+import { dashboardApi, expensesApi, recurringApi, exportApi } from '@/lib/api';
 import { formatCurrency, formatDate, formatMonth } from '@/lib/utils';
 import type { ExpenseItem, IncomeItem } from '@/types';
 import Link from 'next/link';
 import { useState } from 'react';
-import { AlertTriangle, Home, RefreshCw, TrendingUp, Sparkles, ChevronRight, ArrowRight, TrendingDown } from 'lucide-react';
+import { AlertTriangle, Home, RefreshCw, TrendingUp, Sparkles, ChevronRight, ArrowRight, TrendingDown, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [payingId, setPayingId] = useState<number | null>(null);
   const [fundingId, setFundingId] = useState<number | null>(null);
+  const [exportingFY, setExportingFY] = useState(false);
+
+  async function handleTaxExport() {
+    setExportingFY(true);
+    const now = new Date();
+    const fy = now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear();
+    try {
+      const result = await exportApi.taxYear(fy);
+      const rows: string[][] = [];
+      rows.push([`Finance Tracker — ${result.financial_year}`]);
+      rows.push([]);
+      rows.push(['INCOME']);
+      rows.push(['Date', 'Description', 'Type', 'Property', 'Amount', 'Notes']);
+      result.income.forEach((i) => rows.push([
+        String(i.date), String(i.name), String(i.type), String(i.property),
+        String(i.amount), String(i.notes),
+      ]));
+      rows.push([]);
+      rows.push(['EXPENSES']);
+      rows.push(['Due Date', 'Description', 'Category', 'Property', 'Amount', 'Paid', 'Status', 'Notes']);
+      result.expenses.forEach((e) => rows.push([
+        String(e.due_date), String(e.name), String(e.category), String(e.property),
+        String(e.amount), String(e.amount_paid), String(e.status), String(e.notes),
+      ]));
+      rows.push([]);
+      rows.push(['SUMMARY']);
+      rows.push(['Total Income', String(result.summary.total_income)]);
+      rows.push(['Total Expenses', String(result.summary.total_expenses)]);
+      rows.push(['Net Cashflow', String(result.summary.net)]);
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `finance-tracker-FY${fy}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`FY${fy} export downloaded`);
+    } catch {
+      toast.error('Export failed. Please try again.');
+    } finally {
+      setExportingFY(false);
+    }
+  }
   const hasGenerated = useRef(false);
 
   // Auto-generate recurring bills for current + next month on every dashboard visit
@@ -227,6 +271,14 @@ export default function DashboardPage() {
             <p className="text-lg font-bold text-white">{formatCurrency(data.total_monthly_expenses)}</p>
           </div>
         </div>
+        <button
+          onClick={handleTaxExport}
+          disabled={exportingFY}
+          className="mt-3 w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold py-2 rounded-xl transition-colors disabled:opacity-50"
+        >
+          <FileDown size={13} />
+          {exportingFY ? 'Preparing export…' : 'Download Tax Year Summary (for accountant)'}
+        </button>
       </div>
 
       {/* ── NEXT 7 UNFUNDED ── highlight card */}
