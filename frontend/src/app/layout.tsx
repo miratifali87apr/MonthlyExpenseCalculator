@@ -10,6 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://cashflowwise.com.au'),
   title: 'CashflowWise — Property Cashflow for Australian Investors',
   description: 'Track property bills, rental income, and cashflow in one place. AI reads your PM statements. Built for Australian property investors. Free to start.',
   keywords: 'property cashflow, investment property tracker, PM statement, Australian property investor, rental income tracker',
