@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Finance Tracker',
-  description: 'Personal finance management — track expenses, income, and properties',
+  title: 'CashflowWise',
+  description: 'Property & personal finance management — track expenses, income, and cashflow',
 };
 
 export default function RootLayout({

@@ -124,8 +124,8 @@ function LoginPageInner() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-4 backdrop-blur-sm border border-white/20">
             <DollarSign className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Finance Tracker</h1>
-          <p className="text-slate-400 mt-2 text-sm">Property & personal finance management</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">CashflowWise</h1>
+          <p className="text-slate-400 mt-2 text-sm">Smart cashflow for property investors</p>
           <div className="mt-5 flex flex-col gap-2 text-left max-w-xs mx-auto">
             {[
               { icon: '🏠', text: 'Track every property bill automatically' },

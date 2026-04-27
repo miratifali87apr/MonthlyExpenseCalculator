@@ -29,7 +29,7 @@ export default function DashboardPage() {
     try {
       const result = await exportApi.taxYear(fy);
       const rows: string[][] = [];
-      rows.push([`Finance Tracker — ${result.financial_year}`]);
+      rows.push([`CashflowWise — ${result.financial_year}`]);
       rows.push([]);
       rows.push(['INCOME']);
       rows.push(['Date', 'Description', 'Type', 'Property', 'Amount', 'Notes']);

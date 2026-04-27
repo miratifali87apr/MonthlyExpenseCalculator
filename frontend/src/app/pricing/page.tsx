@@ -43,7 +43,7 @@ export default function PricingPage() {
           <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center">
             <DollarSign className="w-4 h-4 text-white" />
           </div>
-          <span className="text-white font-semibold text-sm">Finance Tracker</span>
+          <span className="text-white font-semibold text-sm">CashflowWise</span>
         </div>
         <Link href="/dashboard" className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm transition-colors">
           <ArrowLeft className="w-4 h-4" />

@@ -28,7 +28,7 @@ export function Header() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [alert, setAlert] = useState<AlertState>(null);
 
-  const pageTitle = PAGE_TITLES[pathname] || 'Finance Tracker';
+  const pageTitle = PAGE_TITLES[pathname] || 'CashflowWise';
   const currentMonthYear = dayjs().format('MMMM YYYY');
 
   async function handleGenerateBills() {
