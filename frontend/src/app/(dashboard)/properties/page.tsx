@@ -159,6 +159,7 @@ function PropertyCard({
 // ─── Add Property Modal ───────────────────────────────────────────────────────
 
 function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [propertyType, setPropertyType] = useState<'investment' | 'ppr'>('investment');
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -168,6 +169,8 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const isInvestment = propertyType === 'investment';
 
   function update(field: string, value: string | boolean) {
     setForm(f => ({ ...f, [field]: value }));
@@ -181,9 +184,9 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       await propertiesApi.create({
         name: form.name.trim(),
         address: form.address.trim() || undefined,
-        tenant_liable_for_water: form.tenant_liable_for_water,
-        weekly_rent: parseFloat(form.weekly_rent) || 0,
-        pm_fee_pct: parseFloat(form.pm_fee_pct) / 100 || 0,
+        tenant_liable_for_water: isInvestment ? form.tenant_liable_for_water : false,
+        weekly_rent: isInvestment ? (parseFloat(form.weekly_rent) || 0) : 0,
+        pm_fee_pct: isInvestment ? (parseFloat(form.pm_fee_pct) / 100 || 0) : 0,
       });
       onSaved();
       onClose();
@@ -195,38 +198,102 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
           <h2 className="font-bold text-slate-900">Add Property</h2>
           <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
         </div>
-        <div className="px-5 py-4 space-y-3">
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Property type toggle */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-2">Property Type</label>
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              {(['investment', 'ppr'] as const).map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setPropertyType(type)}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition-colors ${
+                    propertyType === type
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {type === 'investment' ? 'Investment Property' : 'Owner-Occupied (PPR)'}
+                </button>
+              ))}
+            </div>
+            {!isInvestment && (
+              <p className="text-xs text-slate-400 mt-1.5">
+                PPR properties have no rental income or PM fees.
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Property Name *</label>
-            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. Kirwan" value={form.name} onChange={e => update('name', e.target.value)} />
+            <input
+              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              placeholder="e.g. Kirwan"
+              value={form.name}
+              onChange={e => update('name', e.target.value)}
+            />
           </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Address</label>
-            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. 12 Main St, Kirwan QLD 4817" value={form.address} onChange={e => update('address', e.target.value)} />
+            <input
+              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              placeholder="e.g. 12 Main St, Kirwan QLD 4817"
+              value={form.address}
+              onChange={e => update('address', e.target.value)}
+            />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Weekly Rent ($)</label>
-              <input type="number" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. 550" value={form.weekly_rent} onChange={e => update('weekly_rent', e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">PM Fee %</label>
-              <input type="number" step="0.1" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. 7.5" value={form.pm_fee_pct} onChange={e => update('pm_fee_pct', e.target.value)} />
-            </div>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="rounded" checked={form.tenant_liable_for_water} onChange={e => update('tenant_liable_for_water', e.target.checked)} />
-            <span className="text-sm text-slate-700">Tenant pays water</span>
-          </label>
+
+          {isInvestment && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Weekly Rent ($)</label>
+                <input
+                  type="number"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                  placeholder="e.g. 550"
+                  value={form.weekly_rent}
+                  onChange={e => update('weekly_rent', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">PM Management Fee %</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+                  placeholder="e.g. 7.5"
+                  value={form.pm_fee_pct}
+                  onChange={e => update('pm_fee_pct', e.target.value)}
+                />
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer bg-slate-50 rounded-lg px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 w-4 h-4"
+                  checked={form.tenant_liable_for_water}
+                  onChange={e => update('tenant_liable_for_water', e.target.checked)}
+                />
+                <span className="text-sm text-slate-700">Tenant pays water</span>
+              </label>
+            </>
+          )}
+
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+
+        {/* Footer — always visible */}
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end shrink-0">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" loading={saving} onClick={handleSave}>Save Property</Button>
         </div>
@@ -289,16 +356,16 @@ export default function PropertiesPage() {
 
       {/* Portfolio summary banner */}
       <div className="bg-slate-900 rounded-xl px-4 py-4 text-white">
-        <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Total Portfolio — Est. Monthly</p>
-        <div className="flex items-end justify-between mt-2">
-          <div>
+        <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-2">Portfolio — Est. Monthly</p>
+        <div className="flex items-end justify-between gap-2">
+          <div className="min-w-0">
             <p className="text-xs text-slate-400">Properties: {(properties ?? []).length}</p>
             <p className="text-xs text-slate-400 mt-0.5">Tenanted: {(properties ?? []).filter(p => (p.weekly_rent ?? 0) > 0).length}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-400">Total out of pocket</p>
-            <p className={`text-2xl font-bold ${totalOutOfPocket > 0 ? 'text-red-400' : 'text-green-400'}`}>
-              ({formatCurrency(totalOutOfPocket)})
+          <div className="text-right shrink-0">
+            <p className="text-xs text-slate-400">Est. out of pocket</p>
+            <p className={`text-xl font-bold ${totalOutOfPocket > 0 ? 'text-red-400' : 'text-green-400'}`}>
+              {totalOutOfPocket > 0 ? `(${formatCurrency(totalOutOfPocket)})` : formatCurrency(-totalOutOfPocket)}
             </p>
           </div>
         </div>
