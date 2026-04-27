@@ -27,7 +27,7 @@ def _monthly_equivalent(amount: float, frequency: str) -> float:
     return float(amount)
 
 
-@router.get("/", response_model=List[PropertyResponse])
+@router.get("", response_model=List[PropertyResponse])
 def list_properties(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -41,7 +41,7 @@ def list_properties(
     return [PropertyResponse.model_validate(p) for p in properties]
 
 
-@router.post("/", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)
 def create_property(
     data: PropertyCreate,
     db: Session = Depends(get_db),

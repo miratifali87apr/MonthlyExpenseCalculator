@@ -12,7 +12,7 @@ from app.auth import get_current_user
 router = APIRouter()
 
 
-@router.get("/", response_model=List[IncomeItemResponse])
+@router.get("", response_model=List[IncomeItemResponse])
 def list_income(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None, ge=2000),
@@ -54,7 +54,7 @@ def list_income(
     return [IncomeItemResponse.model_validate(i) for i in items]
 
 
-@router.post("/", response_model=IncomeItemResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=IncomeItemResponse, status_code=status.HTTP_201_CREATED)
 def create_income(
     data: IncomeItemCreate,
     db: Session = Depends(get_db),

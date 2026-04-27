@@ -30,7 +30,7 @@ def _resolve_status(expense: models.ExpenseItem) -> str:
     return expense.status
 
 
-@router.get("/", response_model=List[ExpenseItemResponse])
+@router.get("", response_model=List[ExpenseItemResponse])
 def list_expenses(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None, ge=2000),
@@ -72,7 +72,7 @@ def list_expenses(
     return [ExpenseItemResponse.model_validate(i) for i in items]
 
 
-@router.post("/", response_model=ExpenseItemResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ExpenseItemResponse, status_code=status.HTTP_201_CREATED)
 def create_expense(
     data: ExpenseItemCreate,
     db: Session = Depends(get_db),

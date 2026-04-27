@@ -18,7 +18,7 @@ from app.auth import get_current_user
 router = APIRouter()
 
 
-@router.get("/", response_model=List[RecurringTemplateResponse])
+@router.get("", response_model=List[RecurringTemplateResponse])
 def list_recurring_templates(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -35,7 +35,7 @@ def list_recurring_templates(
     return [RecurringTemplateResponse.model_validate(t) for t in templates]
 
 
-@router.post("/", response_model=RecurringTemplateResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RecurringTemplateResponse, status_code=status.HTTP_201_CREATED)
 def create_recurring_template(
     data: RecurringTemplateCreate,
     db: Session = Depends(get_db),
