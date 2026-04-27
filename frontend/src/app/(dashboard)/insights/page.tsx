@@ -983,21 +983,94 @@ function PredictorTab() {
       )}
 
       {/* Disclaimer */}
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Important Disclaimer — General Information Only</p>
-        <p className="text-xs text-amber-900 leading-relaxed">
-          All figures are <strong>estimates only</strong> based on publicly available 2024-25 rates and are provided for indicative purposes. This tool does <strong>not</strong> constitute financial, tax, or legal advice. You should consult a <strong>registered tax agent or accountant</strong> (CPA/CA), a qualified property lawyer or conveyancer, and a licensed financial adviser before making any investment decision.
-        </p>
-        <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
-          <li><strong>Stamp duty / transfer duty:</strong> Rates and thresholds are indexed annually. NSW/VIC trust surcharges included. Foreign purchaser surcharges, off-the-plan discounts and FHOG concessions are <em>not</em> included.</li>
-          <li><strong>Land tax:</strong> Land value estimated at {landValPct}% of purchase price — actual UCV set by the state valuer-general may differ significantly. NSW trust/company = no threshold (taxed from $1). VIC trust surcharge 0.5% applies.</li>
-          <li><strong>Tax brackets:</strong> 2024-25 Stage 3 rates apply from 1 July 2024. Medicare Levy Surcharge, HECS/HELP repayments, and low-income offsets are not included.</li>
-          <li><strong>Depreciation:</strong> Div 40 plant/equipment unavailable for established properties acquired post-9 May 2017. Div 43 building allowance at 2.5%/yr (residential). A quantity surveyor&apos;s report is recommended.</li>
-          <li><strong>Trust / Company / SMSF:</strong> Structural decisions have significant legal and compliance implications. SMSF LRBA rules restrict borrowing structure. Specialist advice is essential.</li>
-          <li><strong>LMI:</strong> Estimated using indicative Helia/QBE tiered rates. Actual premiums vary by lender.</li>
-          <li><strong>10-yr equity:</strong> Growth rate assumption is illustrative only — past capital growth does not guarantee future performance.</li>
-        </ul>
-        <p className="text-xs text-amber-700">Verify current rates: QLD — qro.qld.gov.au | VIC — sro.vic.gov.au | NSW — revenue.nsw.gov.au | WA — revenue.wa.gov.au | SA — revenuesa.sa.gov.au | TAS — sro.tas.gov.au | ACT — revenue.act.gov.au</p>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">General Information Only — Not Financial Advice</p>
+            <p className="text-xs text-slate-500 mt-0.5">This calculator is an educational tool. All figures are estimates based on publicly available 2024–25 ATO and state revenue office rates.</p>
+          </div>
+        </div>
+
+        {/* Key assumptions grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {[
+            { label: 'Stamp duty', note: 'Indexed annually. Trust/foreign surcharges may apply. FHOG concessions not included.' },
+            { label: 'Land tax', note: `Land value estimated at ${landValPct}% of purchase price. Actual UCV set by state valuer-general may differ.` },
+            { label: 'Tax brackets', note: '2024–25 Stage 3 rates. Medicare Levy Surcharge, HECS, and low-income offsets excluded.' },
+            { label: 'Depreciation', note: 'Div 40 unavailable for established properties post-9 May 2017. Quantity surveyor report recommended.' },
+            { label: 'Trust / Company / SMSF', note: 'Structural decisions have significant legal and compliance implications. Specialist advice essential.' },
+            { label: 'LMI', note: 'Estimated using indicative Helia/QBE tiered rates. Actual premiums vary by lender.' },
+          ].map(({ label, note }) => (
+            <div key={label} className="bg-white rounded-lg border border-slate-100 px-3 py-2">
+              <p className="text-xs font-semibold text-slate-700">{label}</p>
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{note}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Official sources */}
+        <div>
+          <p className="text-xs font-semibold text-slate-600 mb-1.5">Verify current rates at official sources:</p>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { state: 'QLD', url: 'qro.qld.gov.au' },
+              { state: 'NSW', url: 'revenue.nsw.gov.au' },
+              { state: 'VIC', url: 'sro.vic.gov.au' },
+              { state: 'WA', url: 'revenue.wa.gov.au' },
+              { state: 'SA', url: 'revenuesa.sa.gov.au' },
+              { state: 'TAS', url: 'sro.tas.gov.au' },
+              { state: 'ACT', url: 'revenue.act.gov.au' },
+              { state: 'ATO', url: 'ato.gov.au' },
+            ].map(({ state, url }) => (
+              <a key={state} href={`https://${url}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-slate-200 text-xs text-slate-600 hover:text-violet-600 hover:border-violet-200 transition-colors">
+                {state}
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Find a Professional */}
+      <div className="rounded-xl border border-violet-100 bg-violet-50 p-5">
+        <p className="text-sm font-semibold text-violet-900 mb-1">Need professional advice?</p>
+        <p className="text-xs text-violet-700 mb-3">These figures are a starting point. Always verify with a qualified Australian professional before making investment decisions.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <a href="https://www.tpb.gov.au/registered-tax-agents" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-white rounded-lg border border-violet-100 px-3 py-2.5 hover:border-violet-300 transition-colors group">
+            <div className="w-6 h-6 rounded-md bg-violet-100 flex items-center justify-center flex-shrink-0">
+              <Receipt className="w-3.5 h-3.5 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-700 group-hover:text-violet-700">Registered Tax Agent</p>
+              <p className="text-[10px] text-slate-400">TPB Register</p>
+            </div>
+          </a>
+          <a href="https://moneysmart.gov.au/financial-advice/financial-advisers-register" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-white rounded-lg border border-violet-100 px-3 py-2.5 hover:border-violet-300 transition-colors group">
+            <div className="w-6 h-6 rounded-md bg-violet-100 flex items-center justify-center flex-shrink-0">
+              <TrendingUp className="w-3.5 h-3.5 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-700 group-hover:text-violet-700">Financial Adviser</p>
+              <p className="text-[10px] text-slate-400">ASIC FAR Register</p>
+            </div>
+          </a>
+          <a href="https://www.lawsociety.com.au/for-the-public/finding-a-lawyer" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-white rounded-lg border border-violet-100 px-3 py-2.5 hover:border-violet-300 transition-colors group">
+            <div className="w-6 h-6 rounded-md bg-violet-100 flex items-center justify-center flex-shrink-0">
+              <Landmark className="w-3.5 h-3.5 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-700 group-hover:text-violet-700">Property Lawyer</p>
+              <p className="text-[10px] text-slate-400">Law Society Register</p>
+            </div>
+          </a>
+        </div>
       </div>
     </div>
   );
