@@ -16,7 +16,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://frontend:3000", settings.frontend_url],
+    allow_origins=["http://localhost:3000", "http://frontend:3000", settings.frontend_url, "https://cashflowwise.com.au", "https://www.cashflowwise.com.au"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
