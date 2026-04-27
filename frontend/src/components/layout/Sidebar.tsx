@@ -52,12 +52,10 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
     <aside className="hidden md:flex w-64 bg-slate-900 flex-col h-screen sticky top-0 shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-800">
-        <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center shrink-0">
+        <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-lg flex items-center justify-center shrink-0">
           <DollarSign className="w-4 h-4 text-white" />
         </div>
-        <span className="text-white font-semibold text-sm leading-tight">
-          Finance<br />Tracker
-        </span>
+        <span className="text-white font-bold text-sm tracking-tight">CashflowWise</span>
       </div>
 
       {/* Navigation */}
