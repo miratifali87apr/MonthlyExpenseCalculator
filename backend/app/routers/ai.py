@@ -126,6 +126,51 @@ def _pdf_to_png_b64(raw_bytes: bytes) -> str:
     return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
 
 
+@router.post("/extract-property")
+async def extract_property(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Upload a PM statement, rental agreement, or lease PDF/image.
+    Returns extracted property details to pre-fill the Add Property form.
+    Available to all users (free feature — it's just form assistance).
+    """
+    content_type = file.content_type or "image/jpeg"
+    raw_bytes = await file.read()
+
+    is_pdf = (
+        content_type == "application/pdf"
+        or (file.filename or "").lower().endswith(".pdf")
+    )
+    if is_pdf:
+        b64 = _pdf_to_png_b64(raw_bytes)
+        media_type = "image/png"
+    else:
+        b64 = base64.standard_b64encode(raw_bytes).decode("utf-8")
+        media_type = content_type
+
+    prompt = (
+        "You are an Australian property document parser. "
+        "Analyse this document (PM statement, rental agreement, or lease) and extract property details. "
+        "Return ONLY valid JSON with these exact keys:\n"
+        '{"property_name": string|null, "address": string|null, '
+        '"weekly_rent": number|null, "pm_fee_pct": number|null, '
+        '"tenant_name": string|null, "notes": string|null}\n'
+        "Rules:\n"
+        "- property_name: short name like suburb or street (e.g. 'Kirwan' or '12 Main St')\n"
+        "- address: full property address\n"
+        "- weekly_rent: rent in dollars per week (convert from monthly/fortnightly if needed)\n"
+        "- pm_fee_pct: management fee as a percentage between 0 and 100 (e.g. 8.5 for 8.5%)\n"
+        "  If you see a dollar amount for management fee, calculate it as pct of gross rent\n"
+        "- tenant_name: name of the tenant if visible\n"
+        "- notes: any important info (e.g. 'Letting fee also charged', 'Water included')\n"
+        "Use null for any field not found. Return JSON only, no explanation."
+    )
+    return _parse_json(_ai_vision(b64, media_type, prompt))
+
+
 @router.post("/parse-statement")
 async def parse_statement(
     file: UploadFile = File(...),

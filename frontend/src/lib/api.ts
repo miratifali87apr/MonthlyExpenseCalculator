@@ -155,6 +155,49 @@ export const propertiesApi = {
     request<PropertySummary>(`/api/properties/${id}/summary`),
 };
 
+// AI
+export const aiApi = {
+  extractProperty: async (file: File): Promise<{
+    property_name: string | null;
+    address: string | null;
+    weekly_rent: number | null;
+    pm_fee_pct: number | null;
+    tenant_name: string | null;
+    notes: string | null;
+  }> => {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_URL}/api/ai/extract-property`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  parseStatement: async (file: File, propertyId: number) => {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('property_id', String(propertyId));
+    const res = await fetch(`${API_URL}/api/ai/parse-statement`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+};
+
 // Export
 export const exportApi = {
   taxYear: (fy: number) => request<{

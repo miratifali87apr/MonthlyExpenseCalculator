@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { propertiesApi, recurringApi } from '@/lib/api';
 import { formatCurrency, CATEGORY_LABELS } from '@/lib/utils';
 import type { Property, RecurringTemplate } from '@/types';
-import { ChevronRight, Droplets, Home as HomeIcon, Plus, X, Upload } from 'lucide-react';
+import { ChevronRight, Droplets, Home as HomeIcon, Plus, X, Upload, FileText, Sparkles, CheckCircle } from 'lucide-react';
+import { aiApi } from '@/lib/api';
 
 function monthlyFromFreq(amount: number, freq: string): number {
   if (freq === 'weekly')      return amount * 52 / 12;
@@ -166,14 +167,48 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     tenant_liable_for_water: false,
     weekly_rent: '',
     pm_fee_pct: '',
+    notes: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState(false);
 
   const isInvestment = propertyType === 'investment';
 
   function update(field: string, value: string | boolean) {
     setForm(f => ({ ...f, [field]: value }));
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExtracting(true);
+    setError('');
+    setExtracted(false);
+    try {
+      const result = await aiApi.extractProperty(file);
+      // Pre-fill whatever the AI found
+      setForm(f => ({
+        ...f,
+        name: result.property_name ?? f.name,
+        address: result.address ?? f.address,
+        weekly_rent: result.weekly_rent != null ? String(result.weekly_rent) : f.weekly_rent,
+        pm_fee_pct: result.pm_fee_pct != null ? String(result.pm_fee_pct) : f.pm_fee_pct,
+        notes: result.notes ?? f.notes,
+      }));
+      // If we found rental data, switch to Investment type automatically
+      if (result.weekly_rent || result.pm_fee_pct) {
+        setPropertyType('investment');
+      }
+      setExtracted(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not read the document. Try a clearer image or enter details manually.');
+    } finally {
+      setExtracting(false);
+      // Reset input so same file can be re-uploaded
+      e.target.value = '';
+    }
   }
 
   async function handleSave() {
@@ -208,6 +243,60 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+          {/* AI Upload zone — primary action */}
+          <label className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer transition-all px-4 py-5 ${
+            extracting
+              ? 'border-violet-300 bg-violet-50'
+              : extracted
+              ? 'border-emerald-300 bg-emerald-50'
+              : 'border-slate-200 bg-slate-50 hover:border-violet-300 hover:bg-violet-50'
+          }`}>
+            <input
+              type="file"
+              accept=".pdf,image/*"
+              className="sr-only"
+              onChange={handleFileUpload}
+              disabled={extracting}
+            />
+            {extracting ? (
+              <>
+                <div className="animate-spin w-6 h-6 border-2 border-violet-400 border-t-transparent rounded-full" />
+                <p className="text-sm font-semibold text-violet-700">Reading document…</p>
+                <p className="text-xs text-violet-500">AI is extracting property details</p>
+              </>
+            ) : extracted ? (
+              <>
+                <CheckCircle className="w-6 h-6 text-emerald-500" />
+                <p className="text-sm font-semibold text-emerald-700">Details extracted — review below</p>
+                <p className="text-xs text-emerald-600">Upload another document to update</p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-violet-500" />
+                  <Sparkles className="w-4 h-4 text-violet-400" />
+                </div>
+                <p className="text-sm font-semibold text-slate-700 text-center">
+                  Upload PM statement or lease
+                </p>
+                <p className="text-xs text-slate-400 text-center">
+                  AI reads the PDF and fills in all fields automatically
+                </p>
+                <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-2.5 py-1 rounded-full mt-1">
+                  PDF, JPG, PNG supported
+                </span>
+              </>
+            )}
+          </label>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-slate-200" />
+            <span className="text-xs text-slate-400 font-medium">or fill in manually</span>
+            <div className="flex-1 border-t border-slate-200" />
+          </div>
+
           {/* Property type toggle */}
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-2">Property Type</label>
@@ -287,6 +376,13 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 <span className="text-sm text-slate-700">Tenant pays water</span>
               </label>
             </>
+          )}
+
+          {form.notes && (
+            <div className="bg-violet-50 border border-violet-100 rounded-lg px-3 py-2.5">
+              <p className="text-xs font-semibold text-violet-700 mb-0.5">AI note</p>
+              <p className="text-xs text-violet-600">{form.notes}</p>
+            </div>
           )}
 
           {error && <p className="text-xs text-red-600">{error}</p>}
