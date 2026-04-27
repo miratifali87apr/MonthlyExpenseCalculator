@@ -54,7 +54,7 @@ export default function DashboardPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `finance-tracker-FY${fy}.csv`;
+      a.download = `cashflowwise-FY${fy}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success(`FY${fy} export downloaded`);
@@ -357,16 +357,16 @@ export default function DashboardPage() {
               return (
                 <div
                   key={item.id}
-                  className={`flex items-center justify-between gap-3 py-3 ${needsFunding ? 'bg-amber-50 -mx-4 px-4 first:-mt-1 last:-mb-1' : ''}`}
+                  className="flex items-center justify-between gap-3 py-3"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className={`font-medium text-sm truncate ${needsFunding ? 'text-amber-900' : 'text-slate-900'}`}>{item.name}</p>
-                    <p className={`text-xs mt-0.5 ${needsFunding ? 'text-amber-700' : 'text-slate-500'}`}>
+                    <p className="font-medium text-sm truncate text-slate-900">{item.name}</p>
+                    <p className="text-xs mt-0.5 text-slate-500">
                       {formatDate(item.due_date)}{item.property ? ` · ${item.property.name}` : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`font-semibold text-sm ${needsFunding ? 'text-amber-900' : 'text-slate-900'}`}>
+                    <span className="font-semibold text-sm text-slate-900">
                       {formatCurrency(item.amount)}
                     </span>
                     {item.status === 'funded' ? (
