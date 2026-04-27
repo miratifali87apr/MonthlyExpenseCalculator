@@ -84,29 +84,47 @@ Supabase handles the auth UI (Google, GitHub, email/password). After sign-in, `a
 
 ## Production Deployment
 
+### Brand / Product Name
+- Product is called **CashflowWise** (previously "Finance Tracker" / "Monthly Expense Calculator")
+- Custom domain: `cashflowwise.com.au` (and `cashflowwise.au`) — registered 2026-04-27 via Crazy Domains
+- Registered under ABN: 58627268599 (ALI CONSULTANCY SERVICES PTY LTD) — used for domain eligibility only
+- Domain auto-renews annually via Crazy Domains account (`sydneymoca@gmail.com`)
+
 ### Services
 | Service | Platform | URL |
 |---------|----------|-----|
-| Frontend | Vercel | `https://monthly-expense-calculator-ten.vercel.app` |
+| Frontend | Vercel | `https://cashflowwise.com.au` (custom domain) |
+| Frontend (fallback) | Vercel | `https://monthly-expense-calculator-ten.vercel.app` |
 | Backend | Render | `https://finance-tracker-backend-nj9l.onrender.com` |
 | Database + Auth | Supabase | `https://fxpwhhtwuwqyclrkhexg.supabase.co` |
+| Domain registrar | Crazy Domains | `crazydomains.com.au` — account: `sydneymoca@gmail.com` |
 
 ### GitHub
 - Repo: `git@github.com:miratifali87apr/MonthlyExpenseCalculator.git`
 - Vercel and Render both auto-deploy from the `main` branch on push
 
+### Deploy flow (code changes)
+```
+git push origin main
+  → Vercel auto-deploys frontend (both cashflowwise.com.au and vercel.app URL update)
+  → Render auto-deploys backend
+```
+No manual DNS or domain changes needed for code updates — `cashflowwise.com.au` always serves the latest Vercel deployment automatically.
+
 ### Vercel (Frontend)
 - Project: `monthly-expense-calculator` under `mir-alis-projects`
 - Dashboard: `vercel.com/mir-alis-projects/monthly-expense-calculator`
+- Custom domain `cashflowwise.com.au` added and configured
+- DNS records set in Crazy Domains: A record → `216.198.79.1`, CNAME `www` → `845160b1887d144c.vercel-dns-017.com`
 - Env vars set: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - Deploys automatically on push to `main`
 
 ### Render (Backend)
-- Service: `finance-tracker-backend` (Docker, Free tier)
+- Service: `finance-tracker-backend` (Docker, **Starter plan $7 USD/month**)
 - Dashboard: `dashboard.render.com` → `finance-tracker-backend`
+- Upgraded from Free to Starter on 2026-04-27 — no more cold starts, server stays awake 24/7
 - Env vars set: `DATABASE_URL`, `SECRET_KEY`, `FRONTEND_URL`, `OPENAI_API_KEY`, `SUPABASE_JWT_SECRET`
-- `FRONTEND_URL` must be `https://monthly-expense-calculator-ten.vercel.app` (the `-ten` suffix is required)
-- Free tier spins down after inactivity — first request after idle takes ~50s
+- `FRONTEND_URL` must be `https://monthly-expense-calculator-ten.vercel.app` (may need updating to `cashflowwise.com.au` once domain is live)
 - To redeploy manually: Render dashboard → Manual Deploy → Deploy latest commit
 
 ### Supabase
@@ -115,6 +133,16 @@ Supabase handles the auth UI (Google, GitHub, email/password). After sign-in, `a
 - Auth providers: Google, GitHub, email/password
 - Database: PostgreSQL (no migrations run yet — tables created by SQLAlchemy on backend startup)
 - JWT secret needed for backend: Supabase dashboard → Settings → API → JWT Settings → JWT Secret
+- **TODO**: Add `cashflowwise.com.au` to Supabase Auth → URL Configuration → Redirect URLs once domain is live
+
+### Known fixes applied (2026-04-27)
+- `redirect_slashes=False` added to FastAPI app in `main.py` — fixes 307 redirect bug where list endpoints (`/api/expenses`, `/api/income`, etc.) were redirecting and dropping the Authorization header
+- Route decorators changed from `@router.get("/")` to `@router.get("")` in expenses, income, properties, recurring routers — required after redirect_slashes change
+
+### User accounts
+- `demo@financetracker.com` — Pro plan, used for demos
+- `sydneymoca@gmail.com` — Pro plan, owner's main account (all data migrated here from demo on 2026-04-27)
+- All other accounts — Free plan
 
 ### To deploy changes
 1. Push to `main` — Vercel and Render both auto-deploy
