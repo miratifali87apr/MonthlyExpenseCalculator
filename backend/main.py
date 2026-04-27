@@ -11,6 +11,7 @@ app = FastAPI(
     title="Finance Tracker API",
     description="Personal Finance & Property Cashflow Manager",
     version="1.0.0",
+    redirect_slashes=False,
 )
 
 app.add_middleware(
