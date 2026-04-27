@@ -1,93 +1,266 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { DashboardSkeleton } from '@/components/ui/Skeleton';
+import { Button } from '@/components/ui/Button';
 import { dashboardApi, expensesApi, recurringApi, exportApi } from '@/lib/api';
 import { formatCurrency, formatDate, formatMonth } from '@/lib/utils';
 import type { ExpenseItem, IncomeItem } from '@/types';
 import Link from 'next/link';
-import { useState } from 'react';
-import { AlertTriangle, Home, RefreshCw, TrendingUp, Sparkles, ChevronRight, ArrowRight, TrendingDown, FileDown } from 'lucide-react';
+import {
+  TrendingUp, TrendingDown, FileDown, ArrowRight,
+  CheckCircle2, Clock, AlertCircle, Home, RefreshCw, Sparkles,
+  ChevronRight, DollarSign,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import dayjs from 'dayjs';
 
+// ─── Tax export ───────────────────────────────────────────────────────────────
+async function downloadTaxExport(setLoading: (v: boolean) => void) {
+  setLoading(true);
+  const now = new Date();
+  const fy = now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear();
+  try {
+    const result = await exportApi.taxYear(fy);
+    const rows: string[][] = [];
+    rows.push([`CashflowWise — ${result.financial_year}`]);
+    rows.push([]);
+    rows.push(['INCOME']);
+    rows.push(['Date', 'Description', 'Type', 'Property', 'Amount', 'Notes']);
+    result.income.forEach((i) => rows.push([
+      String(i.date), String(i.name), String(i.type), String(i.property),
+      String(i.amount), String(i.notes),
+    ]));
+    rows.push([]);
+    rows.push(['EXPENSES']);
+    rows.push(['Due Date', 'Description', 'Category', 'Property', 'Amount', 'Paid', 'Status', 'Notes']);
+    result.expenses.forEach((e) => rows.push([
+      String(e.due_date), String(e.name), String(e.category), String(e.property),
+      String(e.amount), String(e.amount_paid), String(e.status), String(e.notes),
+    ]));
+    rows.push([]);
+    rows.push(['SUMMARY']);
+    rows.push(['Total Income', String(result.summary.total_income)]);
+    rows.push(['Total Expenses', String(result.summary.total_expenses)]);
+    rows.push(['Net Cashflow', String(result.summary.net)]);
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cashflowwise-FY${fy}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`FY${fy} tax summary downloaded`);
+  } catch {
+    toast.error('Export failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ─── Stat pill ────────────────────────────────────────────────────────────────
+function StatPill({
+  icon, label, value, sub, color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  color: string;
+}) {
+  return (
+    <div className="flex-1 min-w-0 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-4">
+      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg mb-3 ${color}`}>
+        {icon}
+      </div>
+      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
+      <p className="text-xl font-bold text-slate-900 tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// ─── Bill row ─────────────────────────────────────────────────────────────────
+function BillRow({
+  item, payingId, fundingId, onPay, onFund,
+}: {
+  item: ExpenseItem;
+  payingId: number | null;
+  fundingId: number | null;
+  onPay: (id: number) => void;
+  onFund: (id: number) => void;
+}) {
+  const isOverdue = item.status === 'overdue';
+  const isFunded = item.status === 'funded';
+  const isPaid = item.status === 'paid';
+  const daysUntil = dayjs(item.due_date).diff(dayjs(), 'day');
+  const dueLabel = daysUntil === 0 ? 'Due today' : daysUntil < 0 ? `${Math.abs(daysUntil)}d overdue` : `Due in ${daysUntil}d`;
+
+  return (
+    <div className="flex items-center gap-3 py-3.5 border-b border-slate-50 last:border-0">
+      {/* Status dot */}
+      <div className={`w-2 h-2 rounded-full shrink-0 ${
+        isPaid ? 'bg-emerald-400' : isFunded ? 'bg-indigo-400' : isOverdue ? 'bg-rose-400' : 'bg-slate-300'
+      }`} />
+
+      {/* Info */}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-slate-900 truncate">{item.name}</p>
+        <p className="text-xs text-slate-400 mt-0.5">
+          <span className={isOverdue ? 'text-rose-500 font-medium' : ''}>{dueLabel}</span>
+          {item.property ? ` · ${item.property.name}` : ''}
+        </p>
+      </div>
+
+      {/* Amount */}
+      <span className="text-sm font-bold text-slate-900 tabular-nums shrink-0">
+        {formatCurrency(item.amount)}
+      </span>
+
+      {/* Action */}
+      <div className="shrink-0">
+        {isPaid ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+            <CheckCircle2 size={11} /> Paid
+          </span>
+        ) : isFunded ? (
+          <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => onPay(item.id)}>
+            Mark Paid
+          </Button>
+        ) : (
+          <div className="flex gap-1.5">
+            <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => onFund(item.id)}>
+              Reserve
+            </Button>
+            <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => onPay(item.id)}>
+              Paid
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Empty / Onboarding ───────────────────────────────────────────────────────
+function EmptyDashboard() {
+  const steps = [
+    {
+      icon: <Home className="w-5 h-5 text-slate-700" />,
+      badge: 'Start here', badgeCls: 'bg-slate-800 text-white',
+      title: 'Add your first property',
+      desc: 'Everything connects to a property — mortgage, insurance, rates, and rental income.',
+      cta: 'Add Property', href: '/properties',
+      ctaCls: 'bg-slate-800 hover:bg-slate-700 text-white',
+      cardCls: 'border-slate-300 ring-2 ring-slate-800/10',
+    },
+    {
+      icon: <RefreshCw className="w-5 h-5 text-indigo-600" />,
+      badge: 'Step 2', badgeCls: 'bg-indigo-50 text-indigo-700',
+      title: 'Set up recurring bills',
+      desc: 'Add your mortgage, insurance, council rates once — we auto-generate them every month.',
+      cta: 'Set Up Recurring Bills', href: '/recurring',
+      ctaCls: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+      cardCls: 'border-slate-200',
+    },
+    {
+      icon: <TrendingUp className="w-5 h-5 text-emerald-600" />,
+      badge: 'Step 3', badgeCls: 'bg-emerald-50 text-emerald-700',
+      title: 'Add your income',
+      desc: 'Salary, rental, or other income. Your dashboard shows real cashflow — in vs out.',
+      cta: 'Add Income', href: '/income',
+      ctaCls: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+      cardCls: 'border-slate-200',
+    },
+    {
+      icon: <Sparkles className="w-5 h-5 text-violet-600" />,
+      badge: 'Optional', badgeCls: 'bg-violet-50 text-violet-700',
+      title: 'Explore AI Insights',
+      desc: 'AI analysis of your portfolio, purchase modelling, and holding cost breakdown.',
+      cta: 'View AI Insights', href: '/insights',
+      ctaCls: 'bg-violet-600 hover:bg-violet-700 text-white',
+      cardCls: 'border-slate-200',
+    },
+  ];
+
+  return (
+    <div className="max-w-xl mx-auto py-8 px-4">
+      <div className="text-center mb-10">
+        <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-2xl mb-4 shadow-lg shadow-indigo-200">
+          <DollarSign className="w-7 h-7 text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Welcome to CashflowWise</h2>
+        <p className="text-slate-500 mt-2 text-sm max-w-sm mx-auto">
+          Set up in 5 minutes. Follow the steps below in order.
+        </p>
+      </div>
+      <div className="space-y-3">
+        {steps.map((step, i) => (
+          <div key={step.href} className={`relative rounded-xl border bg-white p-5 hover:shadow-md transition-shadow ${step.cardCls}`}>
+            {i < steps.length - 1 && (
+              <div className="absolute left-[2.35rem] -bottom-3 w-px h-3 bg-slate-200 z-10" />
+            )}
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center shrink-0">
+                {step.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide mb-1.5 ${step.badgeCls}`}>
+                  {step.badge}
+                </span>
+                <h3 className="font-semibold text-slate-900 text-base">{step.title}</h3>
+                <p className="text-sm text-slate-500 mt-0.5 leading-relaxed">{step.desc}</p>
+                <Link
+                  href={step.href}
+                  className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${step.ctaCls}`}
+                >
+                  {step.cta} <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+        <p className="text-xs text-slate-400 mb-2">Not a property investor?</p>
+        <Link href="/expenses" className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900 font-medium">
+          Go to Bills & Payments <ChevronRight className="w-4 h-4" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main dashboard ───────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [payingId, setPayingId] = useState<number | null>(null);
   const [fundingId, setFundingId] = useState<number | null>(null);
   const [exportingFY, setExportingFY] = useState(false);
-
-  async function handleTaxExport() {
-    setExportingFY(true);
-    const now = new Date();
-    const fy = now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear();
-    try {
-      const result = await exportApi.taxYear(fy);
-      const rows: string[][] = [];
-      rows.push([`CashflowWise — ${result.financial_year}`]);
-      rows.push([]);
-      rows.push(['INCOME']);
-      rows.push(['Date', 'Description', 'Type', 'Property', 'Amount', 'Notes']);
-      result.income.forEach((i) => rows.push([
-        String(i.date), String(i.name), String(i.type), String(i.property),
-        String(i.amount), String(i.notes),
-      ]));
-      rows.push([]);
-      rows.push(['EXPENSES']);
-      rows.push(['Due Date', 'Description', 'Category', 'Property', 'Amount', 'Paid', 'Status', 'Notes']);
-      result.expenses.forEach((e) => rows.push([
-        String(e.due_date), String(e.name), String(e.category), String(e.property),
-        String(e.amount), String(e.amount_paid), String(e.status), String(e.notes),
-      ]));
-      rows.push([]);
-      rows.push(['SUMMARY']);
-      rows.push(['Total Income', String(result.summary.total_income)]);
-      rows.push(['Total Expenses', String(result.summary.total_expenses)]);
-      rows.push(['Net Cashflow', String(result.summary.net)]);
-      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cashflowwise-FY${fy}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success(`FY${fy} export downloaded`);
-    } catch {
-      toast.error('Export failed. Please try again.');
-    } finally {
-      setExportingFY(false);
-    }
-  }
   const hasGenerated = useRef(false);
 
-  // Auto-generate recurring bills for current + next month on every dashboard visit
   useEffect(() => {
     if (hasGenerated.current) return;
     hasGenerated.current = true;
-
     const now = new Date();
-    const thisMonth = now.getMonth() + 1;
-    const thisYear = now.getFullYear();
-    const nextMonth = thisMonth === 12 ? 1 : thisMonth + 1;
-    const nextYear = thisMonth === 12 ? thisYear + 1 : thisYear;
-
-    Promise.all([
-      recurringApi.generate(thisMonth, thisYear),
-      recurringApi.generate(nextMonth, nextYear),
-    ]).then(([curr, next]) => {
-      const total = (curr.generated ?? 0) + (next.generated ?? 0);
-      if (total > 0) {
-        toast.success(`${total} bill${total > 1 ? 's' : ''} auto-generated for ${total > 0 ? 'this/next' : 'this'} month`);
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-        queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      }
-    }).catch(() => {/* silent fail */});
+    const m = now.getMonth() + 1;
+    const y = now.getFullYear();
+    const nm = m === 12 ? 1 : m + 1;
+    const ny = m === 12 ? y + 1 : y;
+    Promise.all([recurringApi.generate(m, y), recurringApi.generate(nm, ny)])
+      .then(([a, b]) => {
+        const total = (a.generated ?? 0) + (b.generated ?? 0);
+        if (total > 0) {
+          toast.success(`${total} bill${total > 1 ? 's' : ''} auto-generated`);
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+          queryClient.invalidateQueries({ queryKey: ['expenses'] });
+        }
+      }).catch(() => {});
   }, [queryClient]);
 
   const { data, isLoading, error } = useQuery({
@@ -100,11 +273,9 @@ export default function DashboardPage() {
     try {
       await expensesApi.pay(id);
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      await queryClient.invalidateQueries({ queryKey: ['expenses'] });
       toast.success('Marked as paid');
-    } catch {
-      toast.error('Failed to mark as paid');
-    } finally { setPayingId(null); }
+    } catch { toast.error('Failed'); }
+    finally { setPayingId(null); }
   };
 
   const handleFund = async (id: number) => {
@@ -112,15 +283,13 @@ export default function DashboardPage() {
     try {
       await expensesApi.fund(id);
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      await queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      toast.success('Marked as funded');
-    } catch {
-      toast.error('Failed to fund');
-    } finally { setFundingId(null); }
+      toast.success('Reserved');
+    } catch { toast.error('Failed'); }
+    finally { setFundingId(null); }
   };
 
   if (isLoading) return <DashboardSkeleton />;
-  if (error) return <div className="text-red-600 p-4">Failed to load dashboard.</div>;
+  if (error) return <div className="text-red-600 p-4 text-sm">Failed to load dashboard.</div>;
   if (!data) return null;
 
   const isEmpty =
@@ -129,313 +298,197 @@ export default function DashboardPage() {
     data.upcoming_7_days.length === 0 &&
     data.overdue_items.length === 0;
 
+  if (isEmpty) return <EmptyDashboard />;
+
   const netPositive = data.net_cashflow >= 0;
-  const totalUnfunded = data.next_unfunded.reduce((s, i) => s + i.amount, 0);
+  const currentMonth = dayjs().format('MMMM YYYY');
 
-  if (isEmpty) {
-    const steps = [
-      {
-        num: 1,
-        icon: <Home className="w-5 h-5 text-slate-700" />,
-        label: 'Start here',
-        labelColor: 'bg-slate-800 text-white',
-        title: 'Add your first property',
-        desc: 'Everything connects to a property — your mortgage, insurance, rates, rental income, and cashflow analysis all live here.',
-        cta: 'Add Property',
-        href: '/properties',
-        ctaStyle: 'bg-slate-800 hover:bg-slate-700 text-white',
-        cardStyle: 'border-slate-300 bg-white ring-2 ring-slate-800/10',
-      },
-      {
-        num: 2,
-        icon: <RefreshCw className="w-5 h-5 text-blue-600" />,
-        label: 'Step 2',
-        labelColor: 'bg-blue-100 text-blue-700',
-        title: 'Set up your recurring bills',
-        desc: 'Add your regular bills once — mortgage, insurance, council rates — and we\'ll auto-generate them every month so you never miss one.',
-        cta: 'Set Up Recurring Bills',
-        href: '/recurring',
-        ctaStyle: 'bg-blue-600 hover:bg-blue-700 text-white',
-        cardStyle: 'border-slate-200 bg-white',
-      },
-      {
-        num: 3,
-        icon: <TrendingUp className="w-5 h-5 text-green-600" />,
-        label: 'Step 3',
-        labelColor: 'bg-green-100 text-green-700',
-        title: 'Add your income',
-        desc: 'Add your salary, rental income, or other earnings. Your dashboard will show real cashflow — what\'s coming in vs going out.',
-        cta: 'Add Income',
-        href: '/income',
-        ctaStyle: 'bg-green-600 hover:bg-green-700 text-white',
-        cardStyle: 'border-slate-200 bg-white',
-      },
-      {
-        num: 4,
-        icon: <Sparkles className="w-5 h-5 text-purple-600" />,
-        label: 'Optional',
-        labelColor: 'bg-purple-100 text-purple-700',
-        title: 'Explore AI Insights',
-        desc: 'Once your data is set up, get an AI analysis of your portfolio, model new property purchases, and see your holding costs.',
-        cta: 'View AI Insights',
-        href: '/insights',
-        ctaStyle: 'bg-purple-600 hover:bg-purple-700 text-white',
-        cardStyle: 'border-slate-200 bg-white',
-      },
-    ];
+  // Merge upcoming + overdue into one action list, deduplicated
+  const allActionItems: ExpenseItem[] = [
+    ...data.overdue_items,
+    ...data.next_unfunded.filter(i => !data.overdue_items.find(o => o.id === i.id)),
+    ...data.upcoming_7_days.filter(i =>
+      !data.overdue_items.find(o => o.id === i.id) &&
+      !data.next_unfunded.find(n => n.id === i.id)
+    ),
+  ].slice(0, 10);
 
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-slate-900 rounded-2xl mb-4">
-            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-slate-900">Welcome — let&apos;s get you set up</h2>
-          <p className="text-slate-500 mt-2 text-sm max-w-md mx-auto">
-            Follow these steps in order. It takes about 5 minutes and your dashboard will be fully live.
-          </p>
-        </div>
-
-        {/* Steps */}
-        <div className="space-y-3">
-          {steps.map((step, i) => (
-            <div key={step.num} className={`relative rounded-xl border p-5 transition-shadow hover:shadow-md ${step.cardStyle}`}>
-              {/* Connector line */}
-              {i < steps.length - 1 && (
-                <div className="absolute left-[2.35rem] -bottom-3 w-px h-3 bg-slate-200 z-10" />
-              )}
-              <div className="flex items-start gap-4">
-                {/* Icon circle */}
-                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
-                  {step.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${step.labelColor}`}>
-                      {step.label}
-                    </span>
-                  </div>
-                  <h3 className="font-semibold text-slate-900 text-base">{step.title}</h3>
-                  <p className="text-sm text-slate-500 mt-1 leading-relaxed">{step.desc}</p>
-                  <Link
-                    href={step.href}
-                    className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${step.ctaStyle}`}
-                  >
-                    {step.cta}
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Personal use divider */}
-        <div className="mt-8 pt-6 border-t border-slate-200 text-center">
-          <p className="text-xs text-slate-400 mb-3">Not a property investor? Track personal bills instead</p>
-          <Link href="/expenses" className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">
-            Go to Expenses <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const currentMonth = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+  const paidCount = data.upcoming_7_days.filter(i => i.status === 'paid').length;
+  const pendingCount = data.next_unfunded.length;
+  const overdueCount = data.overdue_items.length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 max-w-4xl mx-auto">
 
-      {/* Hero Metric */}
-      <div className="rounded-2xl p-5 md:p-7 bg-gradient-to-br from-slate-800 to-slate-900">
-        <p className="text-sm font-medium text-white/70 mb-1">{currentMonth} — Net Cashflow</p>
-        <div className="flex items-end gap-3 mb-4">
-          <p className="text-4xl md:text-5xl font-bold text-white tracking-tight">
-            {formatCurrency(Math.abs(data.net_cashflow))}
-          </p>
-          <div className="flex items-center gap-1 mb-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 text-white/80">
-            {netPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {netPositive ? 'Ahead' : 'Behind'}
+      {/* ── Hero Card ───────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 p-6 md:p-8 relative overflow-hidden">
+        {/* Subtle glow */}
+        <div className="absolute top-0 right-0 w-48 h-48 bg-violet-600/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl pointer-events-none" />
+
+        <div className="relative">
+          <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-1">{currentMonth}</p>
+          <p className="text-xs text-white/50 mb-4">Net Cashflow</p>
+
+          <div className="flex items-end gap-4 mb-6">
+            <p className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-none">
+              {formatCurrency(Math.abs(data.net_cashflow))}
+            </p>
+            <div className={`flex items-center gap-1.5 mb-1 px-3 py-1.5 rounded-full text-xs font-bold ${
+              netPositive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+            }`}>
+              {netPositive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+              {netPositive ? 'Positive' : 'Negative'}
+            </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-white/8 rounded-xl px-4 py-3 border border-white/10">
+              <p className="text-xs text-white/40 font-medium mb-1">Total Income</p>
+              <p className="text-xl font-bold text-emerald-300">{formatCurrency(data.total_monthly_income)}</p>
+            </div>
+            <div className="bg-white/8 rounded-xl px-4 py-3 border border-white/10">
+              <p className="text-xs text-white/40 font-medium mb-1">Total Bills</p>
+              <p className="text-xl font-bold text-white">{formatCurrency(data.total_monthly_expenses)}</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => downloadTaxExport(setExportingFY)}
+            disabled={exportingFY}
+            className="flex items-center gap-2 text-white/50 hover:text-white/80 text-xs font-medium transition-colors disabled:opacity-40"
+          >
+            <FileDown size={13} />
+            {exportingFY ? 'Preparing…' : 'Download Tax Year Summary'}
+          </button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white/10 rounded-xl px-4 py-3">
-            <p className="text-xs text-white/60 font-medium mb-0.5">Total Income</p>
-            <p className="text-lg font-bold text-white">{formatCurrency(data.total_monthly_income)}</p>
-          </div>
-          <div className="bg-white/10 rounded-xl px-4 py-3">
-            <p className="text-xs text-white/60 font-medium mb-0.5">Total Bills</p>
-            <p className="text-lg font-bold text-white">{formatCurrency(data.total_monthly_expenses)}</p>
-          </div>
-        </div>
-        <button
-          onClick={handleTaxExport}
-          disabled={exportingFY}
-          className="mt-3 w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold py-2 rounded-xl transition-colors disabled:opacity-50"
-        >
-          <FileDown size={13} />
-          {exportingFY ? 'Preparing export…' : 'Download Tax Year Summary (for accountant)'}
-        </button>
       </div>
 
-      {/* ── NEXT 7 UNFUNDED ── highlight card */}
-      {data.next_unfunded.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-slate-400 shrink-0" />
-              <span className="font-semibold text-slate-700 text-sm">Upcoming Bills — {data.next_unfunded.length} pending</span>
+      {/* ── Quick Stats Row ─────────────────────────────────────────────────── */}
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        <StatPill
+          icon={<CheckCircle2 size={16} className="text-emerald-600" />}
+          label="Paid this month"
+          value={String(paidCount)}
+          sub="bills cleared"
+          color="bg-emerald-50"
+        />
+        <StatPill
+          icon={<Clock size={16} className="text-indigo-600" />}
+          label="Pending"
+          value={String(pendingCount)}
+          sub={pendingCount > 0 ? `${formatCurrency(data.next_unfunded.reduce((s, i) => s + i.amount, 0))} to action` : 'all clear'}
+          color="bg-indigo-50"
+        />
+        <StatPill
+          icon={<AlertCircle size={16} className={overdueCount > 0 ? 'text-rose-600' : 'text-slate-400'} />}
+          label="Overdue"
+          value={String(overdueCount)}
+          sub={overdueCount > 0 ? 'needs attention' : 'nothing overdue'}
+          color={overdueCount > 0 ? 'bg-rose-50' : 'bg-slate-50'}
+        />
+      </div>
+
+      {/* ── Main content grid ───────────────────────────────────────────────── */}
+      <div className="grid md:grid-cols-5 gap-5">
+
+        {/* Bills to action — 3 cols */}
+        <div className="md:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-slate-900 text-sm">Bills to Action</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Overdue, unfunded &amp; upcoming 7 days</p>
             </div>
-            <div className="text-right">
-              <span className="text-xs text-slate-400">Total</span>
-              <span className="ml-2 font-semibold text-slate-700">{formatCurrency(totalUnfunded)}</span>
-            </div>
+            <Link href="/expenses" className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-0.5">
+              See all <ChevronRight size={13} />
+            </Link>
           </div>
-          <div className="divide-y divide-slate-100">
-            {data.next_unfunded.map((item: ExpenseItem) => (
-              <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-900 text-sm truncate">{item.name}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Due {formatDate(item.due_date)}{item.property ? ` · ${item.property.name}` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-bold text-slate-900">{formatCurrency(item.amount)}</span>
-                  <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => handleFund(item.id)}>
-                    Reserve
-                  </Button>
-                  <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => handleMarkPaid(item.id)}>
-                    Paid
-                  </Button>
-                </div>
+          <div className="px-5 py-1">
+            {allActionItems.length === 0 ? (
+              <div className="py-8 text-center">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-700">All clear!</p>
+                <p className="text-xs text-slate-400 mt-1">No bills needing action right now.</p>
               </div>
-            ))}
+            ) : (
+              allActionItems.map(item => (
+                <BillRow
+                  key={item.id}
+                  item={item}
+                  payingId={payingId}
+                  fundingId={fundingId}
+                  onPay={handleMarkPaid}
+                  onFund={handleFund}
+                />
+              ))
+            )}
           </div>
         </div>
-      )}
 
-      {/* Cashflow Trend Chart */}
-      <Card title="6-Month Cashflow Trend">
-        <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data.cashflow_trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#64748b" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="month" tickFormatter={formatMonth} tick={{ fontSize: 10, fill: '#64748b' }} />
-            <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#64748b' }} width={38} />
-            <Tooltip
-              formatter={(value: number, name: string) => [formatCurrency(value), name === 'income' ? 'Income' : 'Expenses']}
-              labelFormatter={(label) => formatMonth(label)}
-            />
-            <Legend formatter={(v) => v === 'income' ? 'Income' : 'Expenses'} />
-            <Area type="monotone" dataKey="income" stroke="#6366f1" strokeWidth={2} fill="url(#colorIncome)" />
-            <Area type="monotone" dataKey="expenses" stroke="#64748b" strokeWidth={2} fill="url(#colorExpenses)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </Card>
+        {/* Right column — 2 cols */}
+        <div className="md:col-span-2 flex flex-col gap-5">
 
-      {/* Upcoming 7 Days */}
-      <Card title="Upcoming — Next 7 Days">
-        {data.upcoming_7_days.length === 0 ? (
-          <p className="text-sm text-slate-500">No upcoming expenses in the next 7 days.</p>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {data.upcoming_7_days.map((item: ExpenseItem) => {
-              const needsFunding = item.status === 'pending' || item.status === 'overdue';
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between gap-3 py-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm truncate text-slate-900">{item.name}</p>
-                    <p className="text-xs mt-0.5 text-slate-500">
-                      {formatDate(item.due_date)}{item.property ? ` · ${item.property.name}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-semibold text-sm text-slate-900">
-                      {formatCurrency(item.amount)}
-                    </span>
-                    {item.status === 'funded' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Reserved</span>
-                    ) : item.status === 'paid' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Paid</span>
-                    ) : (
-                      <div className="flex gap-1.5">
-                        <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => handleFund(item.id)}>
-                          Fund
-                        </Button>
-                        <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => handleMarkPaid(item.id)}>
-                          Paid
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
-      {/* Overdue */}
-      {data.overdue_items.length > 0 && (
-        <Card title="Overdue Items">
-          <div className="mb-3 px-3 py-2 bg-red-50 rounded-lg">
-            <p className="text-sm font-medium text-red-700">{data.overdue_items.length} item{data.overdue_items.length !== 1 ? 's' : ''} overdue</p>
-          </div>
-          <div className="divide-y divide-red-50">
-            {data.overdue_items.map((item: ExpenseItem) => (
-              <div key={item.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900 text-sm truncate">{item.name}</p>
-                  <p className="text-xs text-red-500 mt-0.5">{formatDate(item.due_date)}{item.property ? ` · ${item.property.name}` : ''}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-semibold text-sm text-red-700">{formatCurrency(item.amount)}</span>
-                  <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => handleFund(item.id)}>Reserve</Button>
-                  <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => handleMarkPaid(item.id)}>Paid</Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Pending Reimbursements */}
-      {data.pending_reimbursements.length > 0 && (
-        <Card title="Pending Reimbursements">
-          <div className="divide-y divide-slate-100">
-            {data.pending_reimbursements.map((item: IncomeItem) => (
-              <div key={item.id} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{item.name}</p>
-                  {item.property && <p className="text-xs text-slate-500">{item.property.name}</p>}
-                </div>
-                <span className="font-semibold text-sm text-amber-700">{formatCurrency(item.amount)}</span>
-              </div>
-            ))}
-            <div className="pt-2 flex justify-between font-semibold text-sm text-slate-700">
-              <span>Total pending</span>
-              <span>{formatCurrency(data.pending_reimbursements.reduce((s, i) => s + Number(i.amount), 0))}</span>
+          {/* Cashflow chart */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex-1">
+            <h2 className="font-bold text-slate-900 text-sm mb-1">6-Month Trend</h2>
+            <p className="text-xs text-slate-400 mb-4">Income vs expenses</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <AreaChart data={data.cashflow_trend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gi" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="ge" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="month" tickFormatter={(v) => dayjs(v).format('MMM')} tick={{ fontSize: 9, fill: '#94a3b8' }} />
+                <YAxis tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: '#94a3b8' }} width={32} />
+                <Tooltip
+                  formatter={(v: number, n: string) => [formatCurrency(v), n === 'income' ? 'Income' : 'Bills']}
+                  labelFormatter={(l) => formatMonth(l)}
+                  contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', fontSize: 12 }}
+                />
+                <Area type="monotone" dataKey="income" stroke="#6366f1" strokeWidth={2} fill="url(#gi)" />
+                <Area type="monotone" dataKey="expenses" stroke="#94a3b8" strokeWidth={2} fill="url(#ge)" />
+              </AreaChart>
+            </ResponsiveContainer>
+            <div className="flex items-center gap-4 mt-3">
+              <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Income
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-400" /> Bills
+              </span>
             </div>
           </div>
-        </Card>
-      )}
 
+          {/* Pending reimbursements */}
+          {data.pending_reimbursements.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+              <h2 className="font-bold text-slate-900 text-sm mb-3">Pending Reimbursements</h2>
+              <div className="space-y-2">
+                {data.pending_reimbursements.map((item: IncomeItem) => (
+                  <div key={item.id} className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-700 font-medium truncate">{item.name}</p>
+                      {item.property && <p className="text-xs text-slate-400">{item.property.name}</p>}
+                    </div>
+                    <span className="text-sm font-bold text-slate-900 tabular-nums">{formatCurrency(item.amount)}</span>
+                  </div>
+                ))}
+                <div className="pt-2 mt-2 border-t border-slate-100 flex justify-between text-xs font-semibold text-slate-600">
+                  <span>Total</span>
+                  <span>{formatCurrency(data.pending_reimbursements.reduce((s, i) => s + Number(i.amount), 0))}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
     </div>
   );
 }
