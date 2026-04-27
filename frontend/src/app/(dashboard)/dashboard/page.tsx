@@ -250,13 +250,13 @@ export default function DashboardPage() {
     <div className="space-y-4">
 
       {/* Hero Metric */}
-      <div className={`rounded-2xl p-5 md:p-7 ${netPositive ? 'bg-gradient-to-br from-green-600 to-green-700' : 'bg-gradient-to-br from-slate-800 to-slate-900'}`}>
+      <div className="rounded-2xl p-5 md:p-7 bg-gradient-to-br from-slate-800 to-slate-900">
         <p className="text-sm font-medium text-white/70 mb-1">{currentMonth} — Net Cashflow</p>
         <div className="flex items-end gap-3 mb-4">
           <p className="text-4xl md:text-5xl font-bold text-white tracking-tight">
             {formatCurrency(Math.abs(data.net_cashflow))}
           </p>
-          <div className={`flex items-center gap-1 mb-1 px-2.5 py-1 rounded-full text-xs font-semibold ${netPositive ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'}`}>
+          <div className="flex items-center gap-1 mb-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 text-white/80">
             {netPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
             {netPositive ? 'Ahead' : 'Behind'}
           </div>
@@ -283,23 +283,23 @@ export default function DashboardPage() {
 
       {/* ── NEXT 7 UNFUNDED ── highlight card */}
       {data.next_unfunded.length > 0 && (
-        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-amber-100 border-b border-amber-200">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-amber-600 shrink-0" />
-              <span className="font-bold text-amber-900 text-sm">Needs Attention — {data.next_unfunded.length} upcoming</span>
+              <AlertTriangle size={16} className="text-slate-400 shrink-0" />
+              <span className="font-semibold text-slate-700 text-sm">Upcoming Bills — {data.next_unfunded.length} pending</span>
             </div>
             <div className="text-right">
-              <span className="text-xs text-amber-700">Total</span>
-              <span className="ml-2 font-bold text-amber-900">{formatCurrency(totalUnfunded)}</span>
+              <span className="text-xs text-slate-400">Total</span>
+              <span className="ml-2 font-semibold text-slate-700">{formatCurrency(totalUnfunded)}</span>
             </div>
           </div>
-          <div className="divide-y divide-amber-200">
+          <div className="divide-y divide-slate-100">
             {data.next_unfunded.map((item: ExpenseItem) => (
               <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900 text-sm truncate">{item.name}</p>
-                  <p className="text-xs text-amber-700 mt-0.5">
+                  <p className="text-xs text-slate-400 mt-0.5">
                     Due {formatDate(item.due_date)}{item.property ? ` · ${item.property.name}` : ''}
                   </p>
                 </div>
@@ -324,12 +324,12 @@ export default function DashboardPage() {
           <AreaChart data={data.cashflow_trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#16a34a" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#dc2626" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#dc2626" stopOpacity={0} />
+                <stop offset="5%" stopColor="#64748b" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#64748b" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -340,8 +340,8 @@ export default function DashboardPage() {
               labelFormatter={(label) => formatMonth(label)}
             />
             <Legend formatter={(v) => v === 'income' ? 'Income' : 'Expenses'} />
-            <Area type="monotone" dataKey="income" stroke="#16a34a" strokeWidth={2} fill="url(#colorIncome)" />
-            <Area type="monotone" dataKey="expenses" stroke="#dc2626" strokeWidth={2} fill="url(#colorExpenses)" />
+            <Area type="monotone" dataKey="income" stroke="#6366f1" strokeWidth={2} fill="url(#colorIncome)" />
+            <Area type="monotone" dataKey="expenses" stroke="#64748b" strokeWidth={2} fill="url(#colorExpenses)" />
           </AreaChart>
         </ResponsiveContainer>
       </Card>

@@ -159,7 +159,6 @@ function LoginPageInner() {
           {/* OAuth Buttons */}
           <div className="space-y-2 mb-5">
             <OAuthButton provider="google" label="Continue with Google" icon={<GoogleIcon />} />
-            <OAuthButton provider="github" label="Continue with GitHub" icon={<GitHubIcon />} />
           </div>
 
           <div className="flex items-center gap-3 mb-5">

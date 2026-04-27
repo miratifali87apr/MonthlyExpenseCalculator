@@ -37,24 +37,25 @@ export const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  loan: 'bg-blue-100 text-blue-800',
-  insurance: 'bg-purple-100 text-purple-800',
-  utility: 'bg-yellow-100 text-yellow-800',
-  council_rates: 'bg-orange-100 text-orange-800',
-  bas: 'bg-red-100 text-red-800',
-  school_fees: 'bg-pink-100 text-pink-800',
-  credit_card: 'bg-indigo-100 text-indigo-800',
-  car: 'bg-cyan-100 text-cyan-800',
-  pm_fees: 'bg-teal-100 text-teal-800',
-  maintenance: 'bg-amber-100 text-amber-800',
-  letting_fee: 'bg-violet-100 text-violet-800',
-  other: 'bg-gray-100 text-gray-800',
+  loan: 'bg-slate-100 text-slate-600',
+  insurance: 'bg-slate-100 text-slate-600',
+  utility: 'bg-slate-100 text-slate-600',
+  council_rates: 'bg-slate-100 text-slate-600',
+  bas: 'bg-slate-100 text-slate-600',
+  school_fees: 'bg-slate-100 text-slate-600',
+  credit_card: 'bg-slate-100 text-slate-600',
+  car: 'bg-slate-100 text-slate-600',
+  pm_fees: 'bg-slate-100 text-slate-600',
+  maintenance: 'bg-slate-100 text-slate-600',
+  letting_fee: 'bg-slate-100 text-slate-600',
+  other: 'bg-slate-100 text-slate-600',
 };
 
 export const STATUS_COLORS: Record<string, string> = {
-  paid: 'bg-green-100 text-green-800',
-  pending: 'bg-amber-100 text-amber-800',
-  overdue: 'bg-red-100 text-red-800',
+  paid: 'bg-emerald-50 text-emerald-700',
+  pending: 'bg-slate-100 text-slate-600',
+  overdue: 'bg-rose-50 text-rose-600',
+  funded: 'bg-blue-50 text-blue-600',
 };
 
 export const INCOME_TYPE_LABELS: Record<string, string> = {
