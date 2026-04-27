@@ -223,13 +223,13 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                       : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  {type === 'investment' ? 'Investment Property' : 'Owner-Occupied (PPR)'}
+                  {type === 'investment' ? 'Investment Property' : 'Owner-Occupied (PPOR)'}
                 </button>
               ))}
             </div>
             {!isInvestment && (
               <p className="text-xs text-slate-400 mt-1.5">
-                PPR properties have no rental income or PM fees.
+                PPOR properties have no rental income or PM fees.
               </p>
             )}
           </div>
