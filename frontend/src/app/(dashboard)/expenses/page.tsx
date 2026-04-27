@@ -17,14 +17,227 @@ import {
 } from '@/lib/utils';
 import { ExpenseItem, Category, PaymentStatus } from '@/types';
 import dayjs from 'dayjs';
-import { ChevronUp, ChevronDown, ChevronsUpDown, Plus, X, Download, Trash2, CheckSquare, Pencil } from 'lucide-react';
+import {
+  ChevronUp, ChevronDown, ChevronsUpDown, Plus, X, Download,
+  Trash2, CheckSquare, Pencil, BarChart2, Table2, FileSpreadsheet,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { propertiesApi } from '@/lib/api';
 import type { Property } from '@/types';
+import {
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from 'recharts';
 
 type SortKey = 'due_date' | 'name' | 'amount' | 'status';
 type SortDir = 'asc' | 'desc';
+type ViewMode = 'table' | 'chart';
 
+// ─── Chart palette ──────────────────────────────────────────────────────────
+const CHART_COLORS = [
+  '#6366f1', '#64748b', '#0ea5e9', '#10b981', '#f59e0b',
+  '#ec4899', '#8b5cf6', '#14b8a6', '#f97316', '#84cc16',
+  '#06b6d4', '#a855f7',
+];
+
+// ─── Excel export ────────────────────────────────────────────────────────────
+async function exportToExcel(items: ExpenseItem[], month: number, year: number) {
+  const XLSX = await import('xlsx');
+  const rows = items.map(e => ({
+    'Date': formatDate(e.due_date),
+    'Expense Name': e.name,
+    'Category': CATEGORY_LABELS[e.category] ?? e.category,
+    'Property': e.property?.name ?? '',
+    'Amount ($)': e.amount,
+    'Amount Paid ($)': e.amount_paid ?? 0,
+    'Status': e.status.charAt(0).toUpperCase() + e.status.slice(1),
+    'Notes': e.notes ?? '',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // Column widths
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 28 }, { wch: 20 }, { wch: 22 },
+    { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 30 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
+
+  const monthName = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).format('MMM-YYYY');
+  XLSX.writeFile(wb, `CashflowWise-Expenses-${monthName}.xlsx`);
+}
+
+// ─── CSV export (kept for quick download) ────────────────────────────────────
+function exportToCSV(items: ExpenseItem[], month: number, year: number) {
+  const headers = ['Name', 'Category', 'Amount', 'Amount Paid', 'Due Date', 'Status', 'Property', 'Notes'];
+  const rows = items.map(e => [
+    e.name,
+    CATEGORY_LABELS[e.category] ?? e.category,
+    e.amount.toFixed(2),
+    (e.amount_paid ?? 0).toFixed(2),
+    formatDate(e.due_date),
+    e.status,
+    e.property?.name ?? '',
+    e.notes ?? '',
+  ]);
+  const csv = [headers, ...rows]
+    .map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `expenses-${year}-${String(month).padStart(2, '0')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Chart view ──────────────────────────────────────────────────────────────
+function ChartView({ items }: { items: ExpenseItem[] }) {
+  const total = items.reduce((s, e) => s + e.amount, 0);
+
+  // Category breakdown for pie
+  const categoryMap: Record<string, number> = {};
+  for (const e of items) {
+    const key = CATEGORY_LABELS[e.category] ?? e.category;
+    categoryMap[key] = (categoryMap[key] ?? 0) + e.amount;
+  }
+  const pieData = Object.entries(categoryMap)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  // Status breakdown for bar
+  const statusMap: Record<string, number> = {};
+  for (const e of items) {
+    const label = e.status.charAt(0).toUpperCase() + e.status.slice(1);
+    statusMap[label] = (statusMap[label] ?? 0) + e.amount;
+  }
+  const barData = Object.entries(statusMap).map(([status, amount]) => ({ status, amount }));
+
+  const STATUS_BAR_COLORS: Record<string, string> = {
+    Paid: '#10b981',
+    Pending: '#64748b',
+    Overdue: '#f43f5e',
+    Funded: '#6366f1',
+    Partial: '#f59e0b',
+  };
+
+  const formatTooltipValue = (value: number) => formatCurrency(value);
+
+  if (items.length === 0) {
+    return <p className="text-sm text-slate-500 py-4 text-center">No data for selected period.</p>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary pills */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total', value: total, color: 'text-slate-900' },
+          { label: 'Paid', value: items.filter(e => e.status === 'paid').reduce((s, e) => s + e.amount, 0), color: 'text-emerald-700' },
+          { label: 'Pending', value: items.filter(e => e.status === 'pending').reduce((s, e) => s + e.amount, 0), color: 'text-slate-600' },
+          { label: 'Overdue', value: items.filter(e => e.status === 'overdue').reduce((s, e) => s + e.amount, 0), color: 'text-rose-600' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+            <p className="text-xs text-slate-500 mb-1">{label}</p>
+            <p className={`text-lg font-bold ${color}`}>{formatCurrency(value)}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Category pie */}
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">By Category</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={95}
+                paddingAngle={2}
+                dataKey="value"
+              >
+                {pieData.map((_, index) => (
+                  <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={formatTooltipValue} />
+              <Legend
+                formatter={(value) => <span className="text-xs text-slate-600">{value}</span>}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Status bar */}
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">By Status</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={barData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="status" tick={{ fontSize: 12, fill: '#64748b' }} />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#64748b' }}
+                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              />
+              <Tooltip formatter={formatTooltipValue} />
+              <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                {barData.map((entry, index) => (
+                  <Cell key={index} fill={STATUS_BAR_COLORS[entry.status] ?? '#94a3b8'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Category breakdown table */}
+      <div>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Category Breakdown</h3>
+        <div className="overflow-x-auto rounded-xl border border-slate-100">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 text-left text-slate-500">
+                <th className="px-4 py-2.5 font-medium">Category</th>
+                <th className="px-4 py-2.5 font-medium text-right">Amount</th>
+                <th className="px-4 py-2.5 font-medium text-right">% of Total</th>
+                <th className="px-4 py-2.5 font-medium text-right"># Bills</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {pieData.map(({ name, value }) => (
+                <tr key={name} className="hover:bg-slate-50">
+                  <td className="px-4 py-2.5 text-slate-700 font-medium">{name}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(value)}</td>
+                  <td className="px-4 py-2.5 text-right text-slate-500">
+                    {total > 0 ? ((value / total) * 100).toFixed(1) : 0}%
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-slate-500">
+                    {items.filter(e => (CATEGORY_LABELS[e.category] ?? e.category) === name).length}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-50 font-semibold text-slate-900">
+                <td className="px-4 py-2.5">Total</td>
+                <td className="px-4 py-2.5 text-right">{formatCurrency(total)}</td>
+                <td className="px-4 py-2.5 text-right">100%</td>
+                <td className="px-4 py-2.5 text-right">{items.length}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modals ──────────────────────────────────────────────────────────────────
 function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void; onSaved: () => void; properties: Property[] }) {
   const [form, setForm] = useState({
     name: '', category: 'other', amount: '', due_date: dayjs().format('YYYY-MM-DD'),
@@ -275,30 +488,7 @@ function PartialPayModal({ expense, onClose, onSaved }: { expense: ExpenseItem; 
   );
 }
 
-function exportToCSV(items: ExpenseItem[], month: number, year: number) {
-  const headers = ['Name', 'Category', 'Amount', 'Amount Paid', 'Due Date', 'Status', 'Property', 'Notes'];
-  const rows = items.map(e => [
-    e.name,
-    CATEGORY_LABELS[e.category] ?? e.category,
-    e.amount.toFixed(2),
-    (e.amount_paid ?? 0).toFixed(2),
-    formatDate(e.due_date),
-    e.status,
-    e.property?.name ?? '',
-    e.notes ?? '',
-  ]);
-  const csv = [headers, ...rows]
-    .map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `expenses-${year}-${String(month).padStart(2, '0')}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function ExpensesPage() {
   const now = dayjs();
   const [month, setMonth] = useState<number>(now.month() + 1);
@@ -313,6 +503,8 @@ export default function ExpensesPage() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [xlsxLoading, setXlsxLoading] = useState(false);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -429,22 +621,15 @@ export default function ExpensesPage() {
   const total = sorted.reduce((sum: number, e: ExpenseItem) => sum + e.amount, 0);
 
   const months = [
-    { value: 1, label: 'January' },
-    { value: 2, label: 'February' },
-    { value: 3, label: 'March' },
-    { value: 4, label: 'April' },
-    { value: 5, label: 'May' },
-    { value: 6, label: 'June' },
-    { value: 7, label: 'July' },
-    { value: 8, label: 'August' },
-    { value: 9, label: 'September' },
-    { value: 10, label: 'October' },
-    { value: 11, label: 'November' },
-    { value: 12, label: 'December' },
+    { value: 1, label: 'January' }, { value: 2, label: 'February' },
+    { value: 3, label: 'March' }, { value: 4, label: 'April' },
+    { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' },
+    { value: 9, label: 'September' }, { value: 10, label: 'October' },
+    { value: 11, label: 'November' }, { value: 12, label: 'December' },
   ];
 
   const years = Array.from({ length: 5 }, (_, i) => now.year() - 2 + i);
-
   const selectCls = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400";
 
   return (
@@ -471,18 +656,60 @@ export default function ExpensesPage() {
           onSaved={() => { queryClient.invalidateQueries({ queryKey }); toast.success('Payment recorded'); }}
         />
       )}
+
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-slate-900">Expenses</h1>
         <div className="flex items-center gap-2">
-          {sorted.length > 0 && (
+          {/* View toggle */}
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
             <button
-              onClick={() => exportToCSV(sorted, month, year)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-              title="Export to CSV"
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                viewMode === 'table'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
             >
-              <Download size={13} /> Export
+              <Table2 size={13} /> Table
             </button>
+            <button
+              onClick={() => setViewMode('chart')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                viewMode === 'chart'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <BarChart2 size={13} /> Charts
+            </button>
+          </div>
+
+          {/* Export buttons */}
+          {sorted.length > 0 && (
+            <>
+              <button
+                onClick={() => exportToCSV(sorted, month, year)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                title="Export to CSV"
+              >
+                <Download size={13} /> CSV
+              </button>
+              <button
+                onClick={async () => {
+                  setXlsxLoading(true);
+                  try { await exportToExcel(sorted, month, year); }
+                  finally { setXlsxLoading(false); }
+                }}
+                disabled={xlsxLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                title="Export to Excel"
+              >
+                <FileSpreadsheet size={13} /> {xlsxLoading ? 'Generating…' : 'Excel'}
+              </button>
+            </>
           )}
+
           <Button size="sm" onClick={() => setShowAdd(true)}>
             <Plus size={15} className="mr-1" /> Add
           </Button>
@@ -524,12 +751,14 @@ export default function ExpensesPage() {
         </div>
       </Card>
 
-      {/* List */}
+      {/* Content */}
       <Card>
         {isLoading ? (
           <TableSkeleton rows={7} cols={7} />
         ) : error ? (
           <p className="text-sm text-red-600">Failed to load expenses.</p>
+        ) : viewMode === 'chart' ? (
+          <ChartView items={sorted} />
         ) : sorted.length === 0 ? (
           <p className="text-sm text-slate-500">No expenses found for the selected filters.</p>
         ) : (
@@ -537,7 +766,7 @@ export default function ExpensesPage() {
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-slate-100">
               {sorted.map((item: ExpenseItem) => (
-                <div key={item.id} className={`py-3 ${item.status === 'pending' || item.status === 'overdue' ? 'bg-amber-50 -mx-4 px-4' : ''}`}>
+                <div key={item.id} className="py-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-900 text-sm truncate">{item.name}</p>
