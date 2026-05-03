@@ -525,15 +525,21 @@ async def extract_bill_text(
     ])
 
     # ---- Due date ----
+    import datetime
     due_date = None
     date_pat = _find_text([
+        # Same-line: "due date: 25/02/2026" or "due date: 25 Feb 2026"
         r"(?:due|payment|pay\s*by|due\s*date)[^\n]*?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
         r"(?:due|payment|pay\s*by|due\s*date)[^\n]*?(\d{1,2}\s+\w+\s+\d{4})",
         r"(?:due|payment)[^\n]*?(\w+\s+\d{1,2},?\s+\d{4})",
+        # Two-column PDFs: label on one line, date on the next
+        r"(?:due\s*date|pay\s*by)[^\n]*\n\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        r"(?:due\s*date|pay\s*by)[^\n]*\n\s*(\d{1,2}\s+\w+\s+\d{4})",
+        # "bill due" anywhere followed by a date within 80 chars
+        r"(?:bill\s*due|payment\s*due)[\s\S]{0,80}?(\d{1,2}\s+\w+\s+\d{4})",
+        r"(?:bill\s*due|payment\s*due)[\s\S]{0,80}?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
     ])
     if date_pat:
-        # Try to normalise to YYYY-MM-DD
-        import datetime
         for fmt in ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d %B %Y", "%d %b %Y", "%B %d, %Y", "%b %d, %Y"):
             try:
                 due_date = datetime.datetime.strptime(date_pat.strip(), fmt).strftime("%Y-%m-%d")
@@ -542,7 +548,9 @@ async def extract_bill_text(
                 continue
 
     # ---- Issuer / company name ----
-    # Find entity type keyword, then grab the 1-2 capitalised words immediately before it
+    _NOISE_WORDS = {"tax", "invoice", "taxinvoice", "your", "bill", "statement", "ref",
+                    "from", "to", "issued", "dear", "account", "notice", "reminder"}
+
     def _extract_entity_name():
         for entity_type in [
             r"(?:Shire|City|Regional|Rural|Municipal|District)\s+Council",
@@ -551,17 +559,15 @@ async def extract_bill_text(
         ]:
             m = re.search(r"([A-Za-z]+(?:\s+[A-Za-z]+){0,2})\s+(" + entity_type + r")", text, re.IGNORECASE)
             if m:
-                # Extract the pre-entity words + entity type; strip any lowercase-only leading words
                 pre = m.group(1).strip()
                 entity = m.group(2).strip()
-                # Keep only the last 1-2 words if there's lowercase garbage at front
                 words = pre.split()
-                # Find first capitalised word from the left
-                for i, w in enumerate(words):
-                    if w[0].isupper():
-                        clean_pre = " ".join(words[i:])
-                        return f"{clean_pre} {entity}"
-                return f"{pre} {entity}"
+                # Remove noise words, keep last 2 meaningful capitalised words
+                clean = [w for w in words if w.lower() not in _NOISE_WORDS and w[0].isupper()]
+                clean = clean[-2:]  # max 2 words before entity type
+                if clean:
+                    return f"{' '.join(clean)} {entity}"
+                return entity
         # Fallback: first non-garbage line
         return _find_text([r"(?:from|issued\s*by|biller)[:\s]+([^\n]{3,50})"])
 
