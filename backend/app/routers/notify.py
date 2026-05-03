@@ -1,4 +1,5 @@
 import os
+import urllib.error
 import urllib.request
 import json
 from datetime import datetime, timedelta, timezone
@@ -40,6 +41,9 @@ def _send_email(to: str, subject: str, html: str):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return resp.status == 200, None
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        return False, f"HTTP {e.code}: {body}"
     except Exception as e:
         return False, str(e)
 
