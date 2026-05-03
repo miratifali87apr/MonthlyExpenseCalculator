@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PageSpinner } from '@/components/ui/Spinner';
 import { propertiesApi, expensesApi, incomeApi } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import { formatCurrency, CATEGORY_LABELS } from '@/lib/utils';
 import type { ExpenseItem, IncomeItem } from '@/types';
 
@@ -157,18 +158,26 @@ export default function PropertyDetailPage() {
     setAiParsing(true);
     setAiError(null);
     setParsedStatement(null);
+
+    const isPdf = selectedFile.name.toLowerCase().endsWith('.pdf') || selectedFile.type === 'application/pdf';
+    // Use free text-extraction endpoint for PDFs; fall back to AI vision for images
+    const endpoint = isPdf ? '/api/ai/parse-statement-text' : '/api/ai/parse-statement';
+
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('finance_token') ?? '' : '';
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? '';
       const formData = new FormData();
       formData.append('file', selectedFile);
-      const res = await fetch(`${API_URL}/api/ai/parse-statement`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || `HTTP ${res.status}`);
+        const errBody = await res.json().catch(() => null);
+        const detail = errBody?.detail ?? `HTTP ${res.status}`;
+        // If text extraction failed (e.g. scanned PDF), tell user to try image upload
+        throw new Error(detail);
       }
       const data = await res.json();
       setParsedStatement(data);
@@ -192,7 +201,7 @@ export default function PropertyDetailPage() {
       // Save gross rent as income
       if (editedGrossRent && Number(editedGrossRent) > 0) {
         await incomeApi.create({
-          name: 'Rent Received (AI Import)',
+          name: 'Rent Received (Statement Import)',
           type: 'rental',
           amount: Number(editedGrossRent),
           property_id: propId,
@@ -205,7 +214,7 @@ export default function PropertyDetailPage() {
       // Save management fee
       if (editedMgmtFee && Number(editedMgmtFee) > 0) {
         await expensesApi.create({
-          name: 'Management Fee (AI Import)',
+          name: 'Management Fee (Statement Import)',
           category: 'pm_fees' as never,
           amount: Number(editedMgmtFee),
           due_date: due,
@@ -217,7 +226,7 @@ export default function PropertyDetailPage() {
       // Save letting fee
       if (editedLettingFee && Number(editedLettingFee) > 0) {
         await expensesApi.create({
-          name: 'Letting Fee (AI Import)',
+          name: 'Letting Fee (Statement Import)',
           category: 'letting_fee' as never,
           amount: Number(editedLettingFee),
           due_date: due,
@@ -230,7 +239,7 @@ export default function PropertyDetailPage() {
       for (const item of editedMaintenance) {
         if (item.amount > 0) {
           await expensesApi.create({
-            name: item.description || 'Maintenance (AI Import)',
+            name: item.description || 'Maintenance (Statement Import)',
             category: 'maintenance' as never,
             amount: item.amount,
             due_date: due,
@@ -281,12 +290,13 @@ export default function PropertyDetailPage() {
         {/* AI Upload Section */}
         <div className="mb-5 pb-5 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-            📸 Upload PM Statement Screenshot
+            Upload PM Statement (PDF or screenshot)
           </p>
+          <p className="text-xs text-slate-400 mb-2">PDF files are parsed automatically — no AI needed. For scanned images, upload a JPG/PNG.</p>
           <div className="flex flex-wrap items-center gap-2">
             <label className="cursor-pointer">
               <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors">
-                Choose File (JPG, PNG or PDF)
+                Choose File (PDF, JPG or PNG)
               </span>
               <input
                 ref={fileInputRef}
@@ -311,14 +321,14 @@ export default function PropertyDetailPage() {
               loading={aiParsing}
               disabled={!selectedFile || aiParsing}
             >
-              Parse with AI
+              Extract Data
             </Button>
           </div>
 
           {aiParsing && (
             <div className="flex items-center gap-2 mt-3 text-xs text-slate-500">
               <span className="animate-spin h-4 w-4 border-2 border-slate-300 border-t-slate-700 rounded-full shrink-0" />
-              Claude is reading your statement…
+              Reading your statement…
             </div>
           )}
 
@@ -331,7 +341,7 @@ export default function PropertyDetailPage() {
           {parsedStatement && !aiParsing && (
             <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
               <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">
-                AI extracted this data — confirm to save:
+                Extracted data — review and save:
               </p>
 
               <div className="space-y-2">

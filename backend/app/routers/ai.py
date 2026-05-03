@@ -205,6 +205,196 @@ async def parse_statement(
     return _parse_json(_ai_vision(b64, media_type, prompt))
 
 
+@router.post("/extract-bill")
+async def extract_bill(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Upload any bill/invoice PDF or image.
+    Returns structured expense data to auto-create an expense record.
+    Available to all users.
+    """
+    content_type = file.content_type or "image/jpeg"
+    raw_bytes = await file.read()
+
+    is_pdf = (
+        content_type == "application/pdf"
+        or (file.filename or "").lower().endswith(".pdf")
+    )
+    if is_pdf:
+        b64 = _pdf_to_png_b64(raw_bytes)
+        media_type = "image/png"
+    else:
+        b64 = base64.standard_b64encode(raw_bytes).decode("utf-8")
+        media_type = content_type
+
+    categories = "loan | insurance | utility | council_rates | bas | school_fees | credit_card | car | pm_fees | maintenance | letting_fee | other"
+    prompt = (
+        "You are an Australian bill and invoice parser. "
+        "Analyse this document and extract expense details. "
+        "Return ONLY valid JSON with these exact keys:\n"
+        '{"name": string, "amount": number, "due_date": string|null, '
+        '"category": string, "notes": string|null}\n'
+        "Rules:\n"
+        f"- category: must be exactly one of: {categories}\n"
+        "  Choose the best match: 'utility' for water/electricity/gas, 'council_rates' for council/rates, "
+        "  'insurance' for any insurance, 'loan' for mortgage/loan repayments, "
+        "  'maintenance' for repairs/maintenance, 'pm_fees' for property management fees, "
+        "  'other' if none match\n"
+        "- name: short descriptive name, e.g. 'Sydney Water Bill', 'Council Rates Q2', 'Building Insurance 2025'\n"
+        "- amount: total amount due as a number (no $ sign). If GST is shown separately, use the total including GST\n"
+        "- due_date: ISO format YYYY-MM-DD if visible, otherwise null\n"
+        "- notes: issuer name, account number, or any important reference info (keep short, 1-2 lines)\n"
+        "Use null for optional fields if not found. Return JSON only, no explanation."
+    )
+    return _parse_json(_ai_vision(b64, media_type, prompt))
+
+
+@router.post("/parse-statement-text")
+async def parse_statement_text(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Extract PM statement data from a PDF using text extraction + regex.
+    No AI API calls, no Pro plan required — works for all users.
+    Returns the same JSON shape as /parse-statement.
+    """
+    raw_bytes = await file.read()
+    is_pdf = (
+        (file.content_type or "") == "application/pdf"
+        or (file.filename or "").lower().endswith(".pdf")
+    )
+    if not is_pdf:
+        raise HTTPException(status_code=422, detail="Only PDF files are supported by this endpoint. For images use the AI parser.")
+
+    try:
+        import pdfplumber
+        import io as _io
+        with pdfplumber.open(_io.BytesIO(raw_bytes)) as pdf:
+            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    except ImportError:
+        raise HTTPException(status_code=503, detail="pdfplumber not installed on this server.")
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not read PDF: {e}")
+
+    if not text.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Could not extract any text from this PDF. The file may be a scanned image — try the AI parser instead."
+        )
+
+    import re
+
+    def _find_amount(patterns: list[str], txt: str) -> float | None:
+        for pat in patterns:
+            m = re.search(pat, txt, re.IGNORECASE)
+            if m:
+                raw = m.group(1).replace(",", "").replace("$", "").strip()
+                try:
+                    return float(raw)
+                except ValueError:
+                    continue
+        return None
+
+    # ---- Gross Rent ----
+    gross_rent = _find_amount([
+        r"(?:gross\s+)?rental\s+income[^\d$]*\$?([\d,]+\.?\d*)",
+        r"gross\s+rent[^\d$]*\$?([\d,]+\.?\d*)",
+        r"total\s+rent[^\d$]*\$?([\d,]+\.?\d*)",
+        r"rent\s+received[^\d$]*\$?([\d,]+\.?\d*)",
+        r"rent\s+collected[^\d$]*\$?([\d,]+\.?\d*)",
+    ], text)
+
+    # ---- Management Fee ----
+    management_fee = _find_amount([
+        r"management\s+fee[^\d$]*\$?([\d,]+\.?\d*)",
+        r"management\s+(?:commission|charge)[^\d$]*\$?([\d,]+\.?\d*)",
+        r"(?:property\s+)?management[^\d$\n]{0,20}\$?([\d,]+\.?\d*)",
+    ], text)
+
+    # ---- Letting Fee ----
+    letting_fee = _find_amount([
+        r"letting\s+fee[^\d$]*\$?([\d,]+\.?\d*)",
+        r"lease\s+(?:renewal\s+)?fee[^\d$]*\$?([\d,]+\.?\d*)",
+        r"re-?let(?:ting)?\s+fee[^\d$]*\$?([\d,]+\.?\d*)",
+    ], text)
+
+    # ---- Net to Owner ----
+    net_to_owner = _find_amount([
+        r"net\s+(?:amount\s+)?(?:payable|to\s+owner|disbursement|remittance)[^\d$]*\$?([\d,]+\.?\d*)",
+        r"amount\s+(?:payable|paid)\s+to\s+owner[^\d$]*\$?([\d,]+\.?\d*)",
+        r"total\s+(?:net\s+)?(?:payable|disbursed)[^\d$]*\$?([\d,]+\.?\d*)",
+        r"owner\s+(?:net|payment|disbursement)[^\d$]*\$?([\d,]+\.?\d*)",
+        r"net\s+owner[^\d$]*\$?([\d,]+\.?\d*)",
+    ], text)
+
+    # ---- Maintenance items ----
+    maintenance_items: list[dict] = []
+    maintenance_patterns = [
+        r"((?:maintenance|repair|plumb|electr|clean|garden|pest|lock|paint|carpet)[^\n$]*?)\s+\$?([\d,]+\.?\d*)",
+        r"((?:maintenance|repair|plumb|electr|clean|garden|pest|lock|paint|carpet)[^\n$]*?)\s+([\d,]+\.?\d*)\s*$",
+    ]
+    seen_amounts: set[float] = set()
+    for pat in maintenance_patterns:
+        for m in re.finditer(pat, text, re.IGNORECASE | re.MULTILINE):
+            desc = m.group(1).strip().rstrip("-–—:").strip()
+            try:
+                amt = float(m.group(2).replace(",", ""))
+            except ValueError:
+                continue
+            if amt <= 0 or amt in seen_amounts:
+                continue
+            seen_amounts.add(amt)
+            maintenance_items.append({"description": desc, "amount": amt})
+
+    # ---- Period ----
+    period = None
+    period_match = re.search(
+        r"(?:period|statement|month)[^\n]*?(\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b[^\n]*?(\d{4}))",
+        text, re.IGNORECASE
+    )
+    if not period_match:
+        period_match = re.search(
+            r"(\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b[^\n]*?(\d{4}))",
+            text, re.IGNORECASE
+        )
+    if period_match:
+        period = {"month": period_match.group(1).strip(), "year": period_match.group(2)}
+
+    # ---- Property address ----
+    property_address = None
+    addr_match = re.search(
+        r"(?:property|address|premises)[^\n]*?:\s*([^\n]+)",
+        text, re.IGNORECASE
+    )
+    if addr_match:
+        property_address = addr_match.group(1).strip()
+
+    # ---- Total expenses ----
+    total_expenses = _find_amount([
+        r"total\s+(?:deductions|disbursements|expenses|charges)[^\d$]*\$?([\d,]+\.?\d*)",
+        r"(?:deductions|charges)\s+total[^\d$]*\$?([\d,]+\.?\d*)",
+    ], text)
+
+    return {
+        "property_address": property_address,
+        "period": period,
+        "gross_rent": gross_rent,
+        "management_fee": management_fee,
+        "letting_fee": letting_fee,
+        "maintenance_items": maintenance_items,
+        "total_expenses": total_expenses,
+        "net_to_owner": net_to_owner,
+        "_source": "text_extraction",
+    }
+
+
 @router.post("/analyze-portfolio")
 async def analyze_portfolio(
     body: dict,
