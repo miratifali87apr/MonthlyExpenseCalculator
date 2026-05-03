@@ -88,13 +88,13 @@ function AddIncomeModal({ onClose, onSaved, properties }: { onClose: () => void;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 sm:pb-4 pb-20 bg-black/40">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90dvh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
           <h2 className="font-bold text-slate-900">Add Income</h2>
-          <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+          <button onClick={onClose} aria-label="Close" className="rounded focus:outline-none focus:ring-2 focus:ring-slate-400"><X size={20} className="text-slate-400" /></button>
         </div>
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
             <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. Kirwan Rent" value={form.name} onChange={e => update('name', e.target.value)} />
@@ -142,7 +142,7 @@ function AddIncomeModal({ onClose, onSaved, properties }: { onClose: () => void;
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end flex-shrink-0">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" loading={saving} onClick={handleSave}>Save Income</Button>
         </div>
@@ -187,13 +187,13 @@ function EditIncomeModal({ item, onClose, onSaved, properties }: { item: IncomeI
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 sm:pb-4 pb-20 bg-black/40">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90dvh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
           <h2 className="font-bold text-slate-900">Edit Income</h2>
-          <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+          <button onClick={onClose} aria-label="Close" className="rounded focus:outline-none focus:ring-2 focus:ring-slate-400"><X size={20} className="text-slate-400" /></button>
         </div>
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
             <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.name} onChange={e => update('name', e.target.value)} />
@@ -241,7 +241,7 @@ function EditIncomeModal({ item, onClose, onSaved, properties }: { item: IncomeI
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end flex-shrink-0">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" loading={saving} onClick={handleSave}>Save Changes</Button>
         </div>
