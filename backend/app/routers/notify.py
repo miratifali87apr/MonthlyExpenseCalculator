@@ -155,9 +155,9 @@ def _reminder_email_html(user_name: str, bills: list) -> str:
     rows = "".join(
         f"""
         <tr>
-          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a">{b['name']}</td>
-          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:14px;color:#64748b;text-align:center">{b['due_date']}</td>
-          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a;font-weight:600;text-align:right">${b['amount']:,.2f}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#0f172a">{b['name']}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#64748b;text-align:center;white-space:nowrap">{b['due_date']}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#0f172a;font-weight:600;text-align:right;white-space:nowrap">${b['amount']:,.2f}</td>
         </tr>
         """
         for b in bills
@@ -166,32 +166,32 @@ def _reminder_email_html(user_name: str, bills: list) -> str:
     return f"""
     <!DOCTYPE html>
     <html>
-    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;margin:0;padding:24px">
+    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;margin:0;padding:12px">
       <div style="max-width:560px;margin:0 auto;background:white;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
 
-        <div style="background:#0f172a;padding:24px 28px">
+        <div style="background:#0f172a;padding:20px 20px">
           <p style="color:#94a3b8;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin:0 0 4px">CashflowWise</p>
           <h1 style="color:white;font-size:20px;font-weight:700;margin:0">Bills due in the next 3 days</h1>
         </div>
 
-        <div style="padding:24px 28px">
-          <p style="color:#334155;font-size:15px;margin:0 0 20px">
+        <div style="padding:20px 16px">
+          <p style="color:#334155;font-size:15px;margin:0 0 16px">
             Hi {user_name}, you have <strong>{len(bills)} bill{'s' if len(bills) != 1 else ''}</strong> coming up soon. Here's a summary:
           </p>
 
-          <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;table-layout:fixed">
             <thead>
               <tr style="background:#f8fafc">
-                <th style="padding:8px 14px;text-align:left;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Bill</th>
-                <th style="padding:8px 14px;text-align:center;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Due Date</th>
-                <th style="padding:8px 14px;text-align:right;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Amount</th>
+                <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;width:40%">Bill</th>
+                <th style="padding:8px 10px;text-align:center;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;width:30%">Due Date</th>
+                <th style="padding:8px 10px;text-align:right;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;width:30%">Amount</th>
               </tr>
             </thead>
             <tbody>{rows}</tbody>
             <tfoot>
               <tr style="background:#f8fafc">
-                <td colspan="2" style="padding:10px 14px;font-size:13px;font-weight:700;color:#0f172a">Total Due</td>
-                <td style="padding:10px 14px;text-align:right;font-size:16px;font-weight:700;color:#0f172a">${total:,.2f}</td>
+                <td colspan="2" style="padding:10px 10px;font-size:13px;font-weight:700;color:#0f172a">Total Due</td>
+                <td style="padding:10px 10px;text-align:right;font-size:15px;font-weight:700;color:#0f172a;white-space:nowrap">${total:,.2f}</td>
               </tr>
             </tfoot>
           </table>
