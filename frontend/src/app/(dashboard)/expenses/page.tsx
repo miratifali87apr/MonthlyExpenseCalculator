@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { TableSkeleton } from '@/components/ui/Skeleton';
-import { expensesApi } from '@/lib/api';
+import { expensesApi, aiApi } from '@/lib/api';
 import {
   formatCurrency,
   formatDate,
@@ -246,16 +246,23 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })); }
+  function update(field: keyof typeof form, value: string) {
+    if (error) setError('');
+    setForm(f => ({ ...f, [field]: value }));
+  }
 
   async function handleSave() {
-    if (!form.name.trim() || !form.amount) { setError('Name and amount are required.'); return; }
+    const parsedAmount = parseFloat(form.amount);
+    if (!form.name.trim() || !form.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError('Name and a positive amount are required.');
+      return;
+    }
     setSaving(true); setError('');
     try {
       await expensesApi.create({
         name: form.name.trim(), category: form.category as Category,
-        amount: parseFloat(form.amount),
-        due_date: new Date(form.due_date).toISOString(),
+        amount: parsedAmount,
+        due_date: dayjs(form.due_date).toISOString(),
         status: form.status as PaymentStatus,
         property_id: form.property_id ? parseInt(form.property_id) : undefined,
         notes: form.notes.trim() || undefined,
@@ -267,13 +274,19 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 sm:pb-4 pb-20 bg-black/40"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90dvh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
           <h2 className="font-bold text-slate-900">Add Expense</h2>
-          <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+          <button onClick={onClose} aria-label="Close" className="rounded focus:outline-none focus:ring-2 focus:ring-slate-400">
+            <X size={20} className="text-slate-400" />
+          </button>
         </div>
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Expense Name *</label>
             <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. Water Bill" value={form.name} onChange={e => update('name', e.target.value)} />
@@ -281,7 +294,7 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($) *</label>
-              <input type="number" step="0.01" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="0.00" value={form.amount} onChange={e => update('amount', e.target.value)} />
+              <input type="number" step="0.01" min="0.01" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="0.00" value={form.amount} onChange={e => update('amount', e.target.value)} />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Due Date *</label>
@@ -317,7 +330,7 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end flex-shrink-0">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" loading={saving} onClick={handleSave}>Save Expense</Button>
         </div>
@@ -339,17 +352,24 @@ function EditExpenseModal({ expense, onClose, onSaved, properties }: { expense: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })); }
+  function update(field: keyof typeof form, value: string) {
+    if (error) setError('');
+    setForm(f => ({ ...f, [field]: value }));
+  }
 
   async function handleSave() {
-    if (!form.name.trim() || !form.amount) { setError('Name and amount are required.'); return; }
+    const parsedAmount = parseFloat(form.amount);
+    if (!form.name.trim() || !form.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError('Name and a positive amount are required.');
+      return;
+    }
     setSaving(true); setError('');
     try {
       await expensesApi.update(expense.id, {
         name: form.name.trim(),
         category: form.category as Category,
-        amount: parseFloat(form.amount),
-        due_date: new Date(form.due_date).toISOString(),
+        amount: parsedAmount,
+        due_date: dayjs(form.due_date).toISOString(),
         status: form.status as PaymentStatus,
         property_id: form.property_id ? parseInt(form.property_id) : undefined,
         notes: form.notes.trim() || undefined,
@@ -360,13 +380,19 @@ function EditExpenseModal({ expense, onClose, onSaved, properties }: { expense: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+    <div
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 sm:pb-4 pb-20 bg-black/40"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90dvh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
           <h2 className="font-bold text-slate-900">Edit Expense</h2>
-          <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+          <button onClick={onClose} aria-label="Close" className="rounded focus:outline-none focus:ring-2 focus:ring-slate-400">
+            <X size={20} className="text-slate-400" />
+          </button>
         </div>
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Expense Name *</label>
             <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.name} onChange={e => update('name', e.target.value)} />
@@ -374,7 +400,7 @@ function EditExpenseModal({ expense, onClose, onSaved, properties }: { expense: 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($) *</label>
-              <input type="number" step="0.01" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.amount} onChange={e => update('amount', e.target.value)} />
+              <input type="number" step="0.01" min="0.01" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.amount} onChange={e => update('amount', e.target.value)} />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Due Date *</label>
@@ -411,7 +437,7 @@ function EditExpenseModal({ expense, onClose, onSaved, properties }: { expense: 
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end">
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 justify-end flex-shrink-0">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" loading={saving} onClick={handleSave}>Save Changes</Button>
         </div>
@@ -685,9 +711,9 @@ export default function ExpensesPage() {
             </button>
           </div>
 
-          {/* Export buttons */}
+          {/* Export buttons — hidden on mobile to keep Add button visible */}
           {sorted.length > 0 && (
-            <>
+            <div className="hidden sm:contents">
               <button
                 onClick={() => exportToCSV(sorted, month, year)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
@@ -707,7 +733,7 @@ export default function ExpensesPage() {
               >
                 <FileSpreadsheet size={13} /> {xlsxLoading ? 'Generating…' : 'Excel'}
               </button>
-            </>
+            </div>
           )}
 
           <Button size="sm" onClick={() => setShowAdd(true)}>
