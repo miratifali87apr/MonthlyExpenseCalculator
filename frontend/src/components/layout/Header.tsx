@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { Calendar, Zap, CheckCircle, AlertCircle } from 'lucide-react';
+import { Calendar, Zap, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
 import dayjs from 'dayjs';
 import { expensesApi } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -22,14 +22,37 @@ type AlertState = {
   message: string;
 } | null;
 
-export function Header() {
+interface HeaderProps {
+  userName?: string;
+  userEmail?: string;
+  onLogout: () => void;
+}
+
+export function Header({ userName, userEmail, onLogout }: HeaderProps) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const [isGenerating, setIsGenerating] = useState(false);
   const [alert, setAlert] = useState<AlertState>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const pageTitle = PAGE_TITLES[pathname] || 'CashflowWise';
   const currentMonthYear = dayjs().format('MMMM YYYY');
+
+  const initials = userName
+    ? userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : '?';
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
 
   async function handleGenerateBills() {
     setIsGenerating(true);
@@ -87,6 +110,33 @@ export function Header() {
             <Zap size={14} />
             <span className="hidden md:inline">Sync Bills</span>
           </Button>
+
+          {/* Avatar — mobile only, triggers logout menu */}
+          <div className="relative md:hidden" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(v => !v)}
+              className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              aria-label="Account menu"
+            >
+              {initials}
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-10 w-52 bg-white rounded-xl shadow-lg border border-slate-100 z-[70] overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{userName}</p>
+                  <p className="text-xs text-slate-500 truncate">{userEmail}</p>
+                </div>
+                <button
+                  onClick={() => { setMenuOpen(false); onLogout(); }}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut size={15} />
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

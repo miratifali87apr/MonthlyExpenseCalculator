@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CreditCard, TrendingUp, Home, RefreshCw, Sparkles, LogOut } from 'lucide-react';
+import { LayoutDashboard, CreditCard, TrendingUp, Home, RefreshCw, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -14,11 +14,7 @@ const navItems = [
   { href: '/insights',   label: 'Insights',   icon: Sparkles },
 ];
 
-interface MobileNavProps {
-  onLogout: () => void;
-}
-
-export function MobileNav({ onLogout }: MobileNavProps) {
+export function MobileNav() {
   const pathname = usePathname();
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 border-t border-slate-800 flex md:hidden">
@@ -38,13 +34,6 @@ export function MobileNav({ onLogout }: MobileNavProps) {
           </Link>
         );
       })}
-      <button
-        onClick={onLogout}
-        title="Logout"
-        className="w-10 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium text-slate-500 hover:text-red-400 transition-colors"
-      >
-        <LogOut size={18} />
-      </button>
     </nav>
   );
 }
