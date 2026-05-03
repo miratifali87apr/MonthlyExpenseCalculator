@@ -17,7 +17,7 @@ CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 def _send_email(to: str, subject: str, html: str):
     """Send email via Resend API. Returns (success, error_str)."""
-    resend_key = os.environ.get("RESEND_API_KEY", "")
+    resend_key = os.environ.get("RESEND_API_KEY", "").strip()
     if not resend_key:
         return False, "RESEND_API_KEY not set"
 
@@ -308,5 +308,6 @@ def send_bill_reminders(
             "sample_user_id": sample_uid,
             "upcoming_found": len(upcoming),
             "email_errors": email_errors,
+            "resend_key_prefix": os.environ.get("RESEND_API_KEY", "NOT SET")[:12],
         }
     }
