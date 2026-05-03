@@ -88,7 +88,7 @@ def _overdue_email_html(user_name: str, overdue_items: list, total: float) -> st
           </table>
 
           <div style="margin-top:24px;text-align:center">
-            <a href="https://monthly-expense-calculator-ten.vercel.app/expenses"
+            <a href="https://cashflowwise.com.au/expenses"
                style="display:inline-block;background:#0f172a;color:white;font-size:14px;font-weight:600;padding:12px 28px;border-radius:10px;text-decoration:none">
               View & Pay Bills →
             </a>
@@ -96,7 +96,7 @@ def _overdue_email_html(user_name: str, overdue_items: list, total: float) -> st
 
           <p style="color:#94a3b8;font-size:12px;margin-top:24px;text-align:center">
             Finance Tracker · You're receiving this because you have overdue bills.<br>
-            <a href="https://monthly-expense-calculator-ten.vercel.app" style="color:#94a3b8">Manage your account</a>
+            <a href="https://cashflowwise.com.au" style="color:#94a3b8">Manage your account</a>
           </p>
         </div>
       </div>
@@ -152,7 +152,8 @@ def send_overdue_alerts(
         total = sum(i["amount"] for i in items)
         html = _overdue_email_html(user.name or user.email.split("@")[0], items, total)
         subject = f"⚠️ {len(items)} overdue bill{'s' if len(items) > 1 else ''} — ${total:,.0f} outstanding"
-        if _send_email(user.email, subject, html):
+        ok, _ = _send_email(user.email, subject, html)
+        if ok:
             sent += 1
 
     return {"sent": sent, "users_with_overdue": len(user_bills)}
