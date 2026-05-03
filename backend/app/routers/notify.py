@@ -16,10 +16,10 @@ CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 
 def _send_email(to: str, subject: str, html: str):
-    """Send email via Resend API."""
+    """Send email via Resend API. Returns (success, error_str)."""
     resend_key = os.environ.get("RESEND_API_KEY", "")
     if not resend_key:
-        return False
+        return False, "RESEND_API_KEY not set"
 
     payload = json.dumps({
         "from": "CashflowWise <reminders@cashflowwise.com.au>",
@@ -39,9 +39,9 @@ def _send_email(to: str, subject: str, html: str):
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
+            return resp.status == 200, None
+    except Exception as e:
+        return False, str(e)
 
 
 def _overdue_email_html(user_name: str, overdue_items: list, total: float) -> str:
@@ -282,15 +282,19 @@ def send_bill_reminders(
 
     sent = 0
     emailed_users = []
+    email_errors = []
     for uid, data in user_bills.items():
         user = data["user"]
         bills = data["bills"]
         user_name = user.name or user.email.split("@")[0]
         html = _reminder_email_html(user_name, bills)
         subject = "You have bills due soon — CashflowWise"
-        if _send_email(user.email, subject, html):
+        ok, err = _send_email(user.email, subject, html)
+        if ok:
             sent += 1
             emailed_users.append(user.email)
+        else:
+            email_errors.append({"to": user.email, "error": err})
 
     return {
         "sent": sent,
@@ -302,5 +306,6 @@ def send_bill_reminders(
             "sample_due_date": sample_due,
             "sample_user_id": sample_uid,
             "upcoming_found": len(upcoming),
+            "email_errors": email_errors,
         }
     }
