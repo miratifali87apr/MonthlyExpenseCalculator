@@ -1,7 +1,5 @@
 import os
-import urllib.error
-import urllib.request
-import json
+import resend
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -17,33 +15,20 @@ CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 
 def _send_email(to: str, subject: str, html: str):
-    """Send email via Resend API. Returns (success, error_str)."""
+    """Send email via Resend SDK. Returns (success, error_str)."""
     resend_key = os.environ.get("RESEND_API_KEY", "").strip()
     if not resend_key:
         return False, "RESEND_API_KEY not set"
 
-    payload = json.dumps({
-        "from": "CashflowWise <reminders@cashflowwise.com.au>",
-        "to": [to],
-        "subject": subject,
-        "html": html,
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.resend.com/emails",
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {resend_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    resend.api_key = resend_key
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status == 200, None
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        return False, f"HTTP {e.code}: {body}"
+        resend.Emails.send({
+            "from": "CashflowWise <reminders@cashflowwise.com.au>",
+            "to": [to],
+            "subject": subject,
+            "html": html,
+        })
+        return True, None
     except Exception as e:
         return False, str(e)
 
