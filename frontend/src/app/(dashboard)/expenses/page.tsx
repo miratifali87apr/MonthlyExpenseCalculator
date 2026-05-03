@@ -789,14 +789,53 @@ export default function ExpensesPage() {
           <p className="text-sm text-slate-500">No expenses found for the selected filters.</p>
         ) : (
           <>
+            {/* Mobile bulk action bar */}
+            <div className="md:hidden mb-3 flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 font-medium">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 cursor-pointer"
+                  checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                  onChange={toggleSelectAll}
+                />
+                {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+              </label>
+              {selectedIds.size > 0 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleBulkPay}
+                    disabled={bulkLoading}
+                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                  >
+                    Mark All Paid
+                  </button>
+                  <button
+                    onClick={handleBulkDelete}
+                    disabled={bulkLoading}
+                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-slate-100">
               {sorted.map((item: ExpenseItem) => (
                 <div key={item.id} className="py-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-900 text-sm truncate">{item.name}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{formatDate(item.due_date)}{item.property ? ` · ${item.property.name}` : ''}</p>
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300 cursor-pointer mt-1 flex-shrink-0"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                      />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 text-base truncate">{item.name}</p>
+                        <p className="text-sm text-slate-500 mt-0.5">{formatDate(item.due_date)}{item.property ? ` · ${item.property.name}` : ''}</p>
+                      </div>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="font-bold text-slate-900">{formatCurrency(item.amount)}</p>
