@@ -297,6 +297,5 @@ def send_bill_reminders(
             "sample_user_id": sample_uid,
             "upcoming_found": len(upcoming),
             "email_errors": email_errors,
-            "resend_key_prefix": os.environ.get("RESEND_API_KEY", "NOT SET")[:12],
         }
     }
