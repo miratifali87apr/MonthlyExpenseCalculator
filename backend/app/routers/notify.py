@@ -239,7 +239,16 @@ def send_bill_reminders(
     if CRON_SECRET and x_cron_secret != CRON_SECRET:
         raise HTTPException(status_code=401, detail="Invalid cron secret")
 
-    # Use naive datetimes to match how due_date is stored in DB
+    # Debug: check total pending expenses and first due_date value
+    total_pending = db.query(models.ExpenseItem).filter(
+        models.ExpenseItem.status.in_(["pending", "overdue"])
+    ).count()
+    sample = db.query(models.ExpenseItem).filter(
+        models.ExpenseItem.status.in_(["pending", "overdue"])
+    ).first()
+    sample_due = str(sample.due_date) if sample else None
+    sample_uid = sample.user_id if sample else None
+
     now = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     window_end = now + timedelta(days=4)  # include full day of day+3
 
@@ -283,4 +292,15 @@ def send_bill_reminders(
             sent += 1
             emailed_users.append(user.email)
 
-    return {"sent": sent, "users": emailed_users}
+    return {
+        "sent": sent,
+        "users": emailed_users,
+        "_debug": {
+            "now_utc": str(now),
+            "window_end": str(window_end),
+            "total_pending_expenses": total_pending,
+            "sample_due_date": sample_due,
+            "sample_user_id": sample_uid,
+            "upcoming_found": len(upcoming),
+        }
+    }
