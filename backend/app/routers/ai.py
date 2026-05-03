@@ -126,6 +126,40 @@ def _pdf_to_png_b64(raw_bytes: bytes) -> str:
     return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
 
 
+def _pdf_to_png_bytes(raw_bytes: bytes) -> bytes:
+    """Convert first page of a PDF to PNG bytes (for OCR)."""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        raise HTTPException(status_code=503, detail="pypdfium2 not installed.")
+    import io as _io
+    pdf = pdfium.PdfDocument(raw_bytes)
+    page = pdf[0]
+    bitmap = page.render(scale=2)
+    pil_img = bitmap.to_pil()
+    buf = _io.BytesIO()
+    pil_img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _ocr_bytes(image_bytes: bytes) -> str:
+    """Run Tesseract OCR on raw image bytes and return extracted text."""
+    try:
+        import pytesseract
+        from PIL import Image
+        import io as _io
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="OCR is not available on this server (pytesseract/Pillow not installed).",
+        )
+    try:
+        img = Image.open(_io.BytesIO(image_bytes))
+        return pytesseract.image_to_string(img, config="--psm 6")
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"OCR failed: {e}")
+
+
 @router.post("/extract-property")
 async def extract_property(
     file: UploadFile = File(...),
@@ -259,32 +293,45 @@ async def parse_statement_text(
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Extract PM statement data from a PDF using text extraction + regex.
+    Extract PM statement data from a PDF or image using text extraction + OCR + regex.
     No AI API calls, no Pro plan required — works for all users.
+    - Text-based PDF  → pdfplumber extracts text directly
+    - Scanned PDF     → pypdfium2 renders page → Tesseract OCR
+    - JPEG / PNG      → Tesseract OCR directly
     Returns the same JSON shape as /parse-statement.
     """
-    raw_bytes = await file.read()
-    is_pdf = (
-        (file.content_type or "") == "application/pdf"
-        or (file.filename or "").lower().endswith(".pdf")
-    )
-    if not is_pdf:
-        raise HTTPException(status_code=422, detail="Only PDF files are supported by this endpoint. For images use the AI parser.")
+    import io as _io
 
-    try:
-        import pdfplumber
-        import io as _io
-        with pdfplumber.open(_io.BytesIO(raw_bytes)) as pdf:
-            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-    except ImportError:
-        raise HTTPException(status_code=503, detail="pdfplumber not installed on this server.")
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Could not read PDF: {e}")
+    raw_bytes = await file.read()
+    content_type = file.content_type or ""
+    filename = (file.filename or "").lower()
+    is_pdf = content_type == "application/pdf" or filename.endswith(".pdf")
+
+    text = ""
+
+    if is_pdf:
+        # Step 1: try fast text extraction
+        try:
+            import pdfplumber
+            with pdfplumber.open(_io.BytesIO(raw_bytes)) as pdf:
+                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        # Step 2: if no text (scanned PDF), render to image and OCR
+        if not text.strip():
+            png_bytes = _pdf_to_png_bytes(raw_bytes)
+            text = _ocr_bytes(png_bytes)
+    else:
+        # Image file (JPEG, PNG, WEBP, etc.) — OCR directly
+        text = _ocr_bytes(raw_bytes)
 
     if not text.strip():
         raise HTTPException(
             status_code=422,
-            detail="Could not extract any text from this PDF. The file may be a scanned image — try the AI parser instead."
+            detail="Could not extract any text from this file. Try a clearer scan or higher resolution image.",
         )
 
     import re

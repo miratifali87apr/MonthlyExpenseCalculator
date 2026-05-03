@@ -159,16 +159,12 @@ export default function PropertyDetailPage() {
     setAiError(null);
     setParsedStatement(null);
 
-    const isPdf = selectedFile.name.toLowerCase().endsWith('.pdf') || selectedFile.type === 'application/pdf';
-    // Use free text-extraction endpoint for PDFs; fall back to AI vision for images
-    const endpoint = isPdf ? '/api/ai/parse-statement-text' : '/api/ai/parse-statement';
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token ?? '';
       const formData = new FormData();
       formData.append('file', selectedFile);
-      const res = await fetch(`${API_URL}${endpoint}`, {
+      const res = await fetch(`${API_URL}/api/ai/parse-statement-text`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -292,11 +288,11 @@ export default function PropertyDetailPage() {
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
             Upload PM Statement (PDF or screenshot)
           </p>
-          <p className="text-xs text-slate-400 mb-2">PDF files are parsed automatically — no AI needed. For scanned images, upload a JPG/PNG.</p>
+          <p className="text-xs text-slate-400 mb-2">Upload a PDF or photo — data is extracted automatically, no AI cost.</p>
           <div className="flex flex-wrap items-center gap-2">
             <label className="cursor-pointer">
               <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors">
-                Choose File (PDF, JPG or PNG)
+                Choose File (PDF, JPG, PNG…)
               </span>
               <input
                 ref={fileInputRef}
