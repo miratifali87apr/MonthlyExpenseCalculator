@@ -336,67 +336,75 @@ async def parse_statement_text(
 
     import re
 
+    # Normalise OCR artefacts: merge runs of spaces, fix common OCR merges
+    # e.g. "RentalIncome" → "Rental Income", "ManagementFee" → "Management Fee"
+    text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)   # camelCase split
+    text = re.sub(r"([A-Z]{2,})([A-Z][a-z])", r"\1 \2", text)  # ABCDef → ABC Def
+
     def _find_amount(patterns: list[str], txt: str) -> float | None:
         for pat in patterns:
             m = re.search(pat, txt, re.IGNORECASE)
             if m:
                 raw = m.group(1).replace(",", "").replace("$", "").strip()
                 try:
-                    return float(raw)
+                    val = float(raw)
+                    if val > 0:
+                        return val
                 except ValueError:
                     continue
         return None
 
+    # Separator between label and amount — handles spaces, tabs, colons, dashes, dots
+    SEP = r"[^(\d\n]{0,20}"
+
     # ---- Gross Rent ----
     gross_rent = _find_amount([
-        r"(?:gross\s+)?rental\s+income[^\d$]*\$?([\d,]+\.?\d*)",
-        r"gross\s+rent[^\d$]*\$?([\d,]+\.?\d*)",
-        r"total\s+rent[^\d$]*\$?([\d,]+\.?\d*)",
-        r"rent\s+received[^\d$]*\$?([\d,]+\.?\d*)",
-        r"rent\s+collected[^\d$]*\$?([\d,]+\.?\d*)",
+        r"(?:gross\s*)?rental\s*income" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"gross\s*rent" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"total\s*rent" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"rent\s*(?:received|collected|income)" + SEP + r"\$?([\d,]+\.?\d*)",
     ], text)
 
     # ---- Management Fee ----
+    # Skip parenthetical percentages like "(8.8%)" before the dollar amount
     management_fee = _find_amount([
-        r"management\s+fee[^\d$]*\$?([\d,]+\.?\d*)",
-        r"management\s+(?:commission|charge)[^\d$]*\$?([\d,]+\.?\d*)",
-        r"(?:property\s+)?management[^\d$\n]{0,20}\$?([\d,]+\.?\d*)",
+        r"management\s*fee\s*(?:\([^)]*\))?" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"management\s*(?:commission|charge)\s*(?:\([^)]*\))?" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"(?:property\s*)?management\s*(?:\([^)]*\))?" + SEP + r"\$?([\d,]+\.?\d*)",
     ], text)
 
     # ---- Letting Fee ----
     letting_fee = _find_amount([
-        r"letting\s+fee[^\d$]*\$?([\d,]+\.?\d*)",
-        r"lease\s+(?:renewal\s+)?fee[^\d$]*\$?([\d,]+\.?\d*)",
-        r"re-?let(?:ting)?\s+fee[^\d$]*\$?([\d,]+\.?\d*)",
+        r"let(?:t?ing)?\s*fee" + SEP + r"\$?([\d,]+\.?\d*)",  # handles "letting", "leting" (OCR typo)
+        r"lease\s*(?:renewal\s*)?fee" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"re-?let(?:ting)?\s*fee" + SEP + r"\$?([\d,]+\.?\d*)",
     ], text)
 
     # ---- Net to Owner ----
     net_to_owner = _find_amount([
-        r"net\s+(?:amount\s+)?(?:payable|to\s+owner|disbursement|remittance)[^\d$]*\$?([\d,]+\.?\d*)",
-        r"amount\s+(?:payable|paid)\s+to\s+owner[^\d$]*\$?([\d,]+\.?\d*)",
-        r"total\s+(?:net\s+)?(?:payable|disbursed)[^\d$]*\$?([\d,]+\.?\d*)",
-        r"owner\s+(?:net|payment|disbursement)[^\d$]*\$?([\d,]+\.?\d*)",
-        r"net\s+owner[^\d$]*\$?([\d,]+\.?\d*)",
+        r"net\s*(?:amount\s*)?(?:payable|to\s*owner|disbursement|remittance)" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"amount\s*(?:payable|paid)\s*to\s*owner" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"total\s*(?:net\s*)?(?:payable|disbursed)" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"owner\s*(?:net|payment|disbursement)" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"net\s*owner" + SEP + r"\$?([\d,]+\.?\d*)",
     ], text)
 
     # ---- Maintenance items ----
     maintenance_items: list[dict] = []
-    maintenance_patterns = [
-        r"((?:maintenance|repair|plumb|electr|clean|garden|pest|lock|paint|carpet)[^\n$]*?)\s+\$?([\d,]+\.?\d*)",
-        r"((?:maintenance|repair|plumb|electr|clean|garden|pest|lock|paint|carpet)[^\n$]*?)\s+([\d,]+\.?\d*)\s*$",
-    ]
     seen_amounts: set[float] = set()
-    for pat in maintenance_patterns:
-        for m in re.finditer(pat, text, re.IGNORECASE | re.MULTILINE):
-            desc = m.group(1).strip().rstrip("-–—:").strip()
-            try:
-                amt = float(m.group(2).replace(",", ""))
-            except ValueError:
-                continue
-            if amt <= 0 or amt in seen_amounts:
-                continue
-            seen_amounts.add(amt)
-            maintenance_items.append({"description": desc, "amount": amt})
+    for m in re.finditer(
+        r"((?:maintenance|repair|plumb|electr|clean|garden|pest|lock|paint|carpet)\w*[^\n$]{0,60}?)\s+\$?([\d,]+\.?\d*)",
+        text, re.IGNORECASE | re.MULTILINE
+    ):
+        desc = m.group(1).strip().rstrip("-–—:").strip()
+        try:
+            amt = float(m.group(2).replace(",", ""))
+        except ValueError:
+            continue
+        if amt <= 0 or amt in seen_amounts:
+            continue
+        seen_amounts.add(amt)
+        maintenance_items.append({"description": desc, "amount": amt})
 
     # ---- Period ----
     period = None
@@ -425,7 +433,7 @@ async def parse_statement_text(
 
     # ---- Total expenses ----
     total_expenses = _find_amount([
-        r"total\s+(?:deductions|disbursements|expenses|charges)[^\d$]*\$?([\d,]+\.?\d*)",
+        r"total\s*(?:deductions|disbursements|expenses|charges)" + SEP + r"\$?([\d,]+\.?\d*)",
         r"(?:deductions|charges)\s+total[^\d$]*\$?([\d,]+\.?\d*)",
     ], text)
 
@@ -439,6 +447,183 @@ async def parse_statement_text(
         "total_expenses": total_expenses,
         "net_to_owner": net_to_owner,
         "_source": "text_extraction",
+    }
+
+
+@router.post("/extract-bill-text")
+async def extract_bill_text(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Extract bill/invoice data from any PDF or image using OCR + regex.
+    Works for water, electricity, gas, council rates, insurance, loan statements, etc.
+    No AI, no Pro plan required.
+    Returns: name, amount, due_date, category, notes
+    """
+    import io as _io, re
+
+    raw_bytes = await file.read()
+    content_type = file.content_type or ""
+    filename = (file.filename or "").lower()
+    is_pdf = content_type == "application/pdf" or filename.endswith(".pdf")
+
+    text = ""
+    if is_pdf:
+        try:
+            import pdfplumber
+            with pdfplumber.open(_io.BytesIO(raw_bytes)) as pdf:
+                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        except Exception:
+            pass
+        if not text.strip():
+            text = _ocr_bytes(_pdf_to_png_bytes(raw_bytes))
+    else:
+        text = _ocr_bytes(raw_bytes)
+
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Could not extract text from this file.")
+
+    # Normalise OCR camelCase merges
+    text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+    text = re.sub(r"([A-Z]{2,})([A-Z][a-z])", r"\1 \2", text)
+
+    SEP = r"[^(\d\n]{0,20}"
+
+    def _find_amount(patterns):
+        for pat in patterns:
+            m = re.search(pat, text, re.IGNORECASE)
+            if m:
+                raw = m.group(1).replace(",", "").replace("$", "").strip()
+                try:
+                    val = float(raw)
+                    if val > 0:
+                        return val
+                except ValueError:
+                    continue
+        return None
+
+    def _find_text(patterns):
+        for pat in patterns:
+            m = re.search(pat, text, re.IGNORECASE | re.MULTILINE)
+            if m:
+                val = m.group(1).strip()
+                # Strip leading OCR noise (non-letter characters at the start)
+                val = re.sub(r"^[^A-Za-z0-9]+", "", val).strip()
+                return val if val else None
+        return None
+
+    # ---- Amount due ----
+    amount = _find_amount([
+        r"(?:total\s*)?amount\s*(?:due|payable|owing)" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"please\s*pay" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"balance\s*(?:due|owing)" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"total\s*(?:due|payable|charges?)" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"(?:invoice|bill)\s*total" + SEP + r"\$?([\d,]+\.?\d*)",
+        r"(?:current\s*)?(?:charges?|amount)" + SEP + r"\$?([\d,]+\.?\d*)",
+    ])
+
+    # ---- Due date ----
+    due_date = None
+    date_pat = _find_text([
+        r"(?:due|payment|pay\s*by|due\s*date)[^\n]*?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        r"(?:due|payment|pay\s*by|due\s*date)[^\n]*?(\d{1,2}\s+\w+\s+\d{4})",
+        r"(?:due|payment)[^\n]*?(\w+\s+\d{1,2},?\s+\d{4})",
+    ])
+    if date_pat:
+        # Try to normalise to YYYY-MM-DD
+        import datetime
+        for fmt in ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d %B %Y", "%d %b %Y", "%B %d, %Y", "%b %d, %Y"):
+            try:
+                due_date = datetime.datetime.strptime(date_pat.strip(), fmt).strftime("%Y-%m-%d")
+                break
+            except ValueError:
+                continue
+
+    # ---- Issuer / company name ----
+    # Find entity type keyword, then grab the 1-2 capitalised words immediately before it
+    def _extract_entity_name():
+        for entity_type in [
+            r"(?:Shire|City|Regional|Rural|Municipal|District)\s+Council",
+            r"(?:Pty\.?\s*Ltd|Limited)",
+            r"\b(?:Water|Energy|Electricity|Gas|Insurance)\b",
+        ]:
+            m = re.search(r"([A-Za-z]+(?:\s+[A-Za-z]+){0,2})\s+(" + entity_type + r")", text, re.IGNORECASE)
+            if m:
+                # Extract the pre-entity words + entity type; strip any lowercase-only leading words
+                pre = m.group(1).strip()
+                entity = m.group(2).strip()
+                # Keep only the last 1-2 words if there's lowercase garbage at front
+                words = pre.split()
+                # Find first capitalised word from the left
+                for i, w in enumerate(words):
+                    if w[0].isupper():
+                        clean_pre = " ".join(words[i:])
+                        return f"{clean_pre} {entity}"
+                return f"{pre} {entity}"
+        # Fallback: first non-garbage line
+        return _find_text([r"(?:from|issued\s*by|biller)[:\s]+([^\n]{3,50})"])
+
+    issuer = _extract_entity_name()
+
+    # ---- Category detection ----
+    text_lower = text.lower()
+    category = "other"
+    if any(w in text_lower for w in ["water", "sydney water", "urban utilities", "yarra valley"]):
+        category = "utility"
+    elif any(w in text_lower for w in ["electricity", "energy", "origin", "agl", "ergon", "endeavour energy", "ausgrid"]):
+        category = "utility"
+    elif any(w in text_lower for w in ["gas", "natural gas"]):
+        category = "utility"
+    elif any(w in text_lower for w in ["council", "rates", "shire", "city council"]):
+        category = "council_rates"
+    elif any(w in text_lower for w in ["insurance", "allianz", "qbe", "suncorp", "nrma", "aami", "youi"]):
+        category = "insurance"
+    elif any(w in text_lower for w in ["mortgage", "home loan", "loan repayment", "westpac", "commbank", "commonwealth bank", "anz", "nab", "macquarie"]):
+        category = "loan"
+    elif any(w in text_lower for w in ["body corporate", "strata", "owners corporation"]):
+        category = "other"
+    elif any(w in text_lower for w in ["school", "tuition", "fees"]):
+        category = "school_fees"
+    elif any(w in text_lower for w in ["management fee", "property management", "rental management"]):
+        category = "pm_fees"
+    elif any(w in text_lower for w in ["maintenance", "repair", "plumb", "electr", "pest"]):
+        category = "maintenance"
+    elif any(w in text_lower for w in ["credit card", "visa", "mastercard", "amex"]):
+        category = "credit_card"
+    elif any(w in text_lower for w in ["registration", "rego", "vehicle", "car loan", "ctp"]):
+        category = "car"
+
+    # ---- Bill name ----
+    # Try to build a short descriptive name from issuer + category
+    if issuer:
+        name = issuer[:50]
+    else:
+        # Fall back to first non-empty line that looks like a company/header
+        for line in text.splitlines():
+            line = line.strip()
+            if 4 < len(line) < 60 and not re.match(r"^[\d\s$.,/-]+$", line):
+                name = line
+                break
+        else:
+            name = "Bill"
+
+    notes = None
+    acct = _find_text([r"(?:account|acct|reference|ref)\s*(?:number|no\.?|#)?[:\s]+([A-Z0-9\-]{4,20})"])
+    if acct:
+        notes = f"Ref: {acct}"
+
+    return {
+        "name": name,
+        "amount": amount,
+        "due_date": due_date,
+        "category": category,
+        "notes": notes,
+        "_source": "text_extraction",
+        # First 600 chars of extracted text, lowercased — used by the frontend
+        # to auto-match against the user's property names/addresses
+        "_text_sample": text[:600].lower(),
     }
 
 
