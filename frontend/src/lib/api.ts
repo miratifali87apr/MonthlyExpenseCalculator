@@ -180,6 +180,51 @@ export const aiApi = {
     return res.json();
   },
 
+  extractBill: async (file: File): Promise<{
+    name: string;
+    amount: number | null;
+    due_date: string | null;
+    category: string;
+    notes: string | null;
+  }> => {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_URL}/api/ai/extract-bill`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  extractBillFree: async (file: File): Promise<{
+    name: string;
+    amount: number | null;
+    due_date: string | null;
+    category: string;
+    notes: string | null;
+    _text_sample: string;
+  }> => {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_URL}/api/ai/extract-bill-text`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.detail || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
   parseStatement: async (file: File, propertyId: number) => {
     const token = await getToken();
     const formData = new FormData();

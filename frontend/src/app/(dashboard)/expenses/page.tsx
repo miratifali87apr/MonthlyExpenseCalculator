@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -245,10 +245,45 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function update(field: keyof typeof form, value: string) {
     if (error) setError('');
     setForm(f => ({ ...f, [field]: value }));
+  }
+
+  async function handleScanBill(file: File) {
+    setScanning(true);
+    setScanError('');
+    try {
+      const data = await aiApi.extractBillFree(file);
+      // Pre-fill form with extracted data
+      setForm(f => ({
+        ...f,
+        name: data.name || f.name,
+        amount: data.amount != null ? String(data.amount) : f.amount,
+        due_date: data.due_date || f.due_date,
+        category: data.category || f.category,
+        notes: data.notes || f.notes,
+      }));
+      // Auto-match property: check if any property name/address appears in the bill text
+      if (data._text_sample && properties.length > 0) {
+        const sample = data._text_sample;
+        const matched = properties.find(p => {
+          const name = p.name.toLowerCase();
+          const addr = (p.address ?? '').toLowerCase();
+          return sample.includes(name) || (addr.length > 3 && sample.includes(addr.split(' ')[0]));
+        });
+        if (matched) setForm(f => ({ ...f, property_id: String(matched.id) }));
+      }
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Scan failed. Try a clearer image.');
+    } finally {
+      setScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   }
 
   async function handleSave() {
@@ -287,6 +322,23 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
           </button>
         </div>
         <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
+          {/* Scan Bill — upload any bill PDF/image to auto-fill the form */}
+          <label className={`flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${scanning ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'}`}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf,.pdf"
+              className="sr-only"
+              disabled={scanning}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleScanBill(f); }}
+            />
+            {scanning
+              ? <><span className="animate-spin h-4 w-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full shrink-0" /><span className="text-xs text-indigo-600 font-medium">Reading bill…</span></>
+              : <><span className="text-base">📷</span><span className="text-xs text-slate-500 font-medium">Scan bill to auto-fill <span className="text-indigo-600">— tap to upload PDF or photo</span></span></>
+            }
+          </label>
+          {scanError && <p className="text-xs text-red-600">{scanError}</p>}
+
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Expense Name *</label>
             <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. Water Bill" value={form.name} onChange={e => update('name', e.target.value)} />
