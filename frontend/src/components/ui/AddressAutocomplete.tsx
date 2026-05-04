@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Props {
   value: string;
@@ -14,22 +15,55 @@ interface Suggestion {
   display_name: string;
 }
 
+interface DropdownPos {
+  top: number;
+  left: number;
+  width: number;
+}
+
 export default function AddressAutocomplete({ value, onChange, placeholder, className }: Props) {
   const [query, setQuery] = useState(value);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<DropdownPos | null>(null);
+  const [mounted, setMounted] = useState(false);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Sync external value changes (e.g. from PDF scan)
   useEffect(() => {
     setQuery(value);
   }, [value]);
 
+  // Recalculate dropdown position whenever open state changes or window scrolls
+  const updatePos = useCallback(() => {
+    if (!inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 4,   // fixed = viewport coords, no scrollY offset
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open, updatePos]);
+
   const fetchSuggestions = useCallback(async (q: string) => {
-    if (q.length < 4) { setSuggestions([]); setOpen(false); return; }
+    if (q.length < 3) { setSuggestions([]); setOpen(false); return; }
     setLoading(true);
     try {
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=au&format=json&addressdetails=0&limit=6`;
@@ -54,8 +88,10 @@ export default function AddressAutocomplete({ value, onChange, placeholder, clas
   };
 
   const handleSelect = (s: Suggestion) => {
-    // Strip ", Australia" suffix for brevity
-    const clean = s.display_name.replace(/,\s*Australia$/, '').trim();
+    // Preserve any leading street number / unit the user typed (e.g. "4 " or "12/3 ")
+    const numPrefix = query.match(/^([\d]+(?:[\/\-][\d]+)?\s+)/)?.[1] ?? '';
+    const streetName = s.display_name.replace(/,\s*Australia$/, '').trim();
+    const clean = numPrefix ? `${numPrefix.trim()} ${streetName}` : streetName;
     setQuery(clean);
     onChange(clean);
     setSuggestions([]);
@@ -73,31 +109,24 @@ export default function AddressAutocomplete({ value, onChange, placeholder, clas
   // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      if (inputRef.current && !inputRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  return (
-    <div ref={containerRef} className="relative">
-      <input
-        type="text"
-        value={query}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onFocus={() => suggestions.length > 0 && setOpen(true)}
-        placeholder={placeholder ?? 'Start typing an address…'}
-        autoComplete="off"
-        className={className ?? 'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400'}
-      />
-      {loading && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-          <span className="block h-3.5 w-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />
-        </div>
-      )}
-      {open && suggestions.length > 0 && (
-        <ul className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto text-sm">
+  const dropdown = open && suggestions.length > 0 && dropdownPos && mounted
+    ? createPortal(
+        <ul
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            zIndex: 9999,
+          }}
+          className="bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto text-sm"
+        >
           {suggestions.map((s, i) => (
             <li
               key={s.place_id}
@@ -107,8 +136,30 @@ export default function AddressAutocomplete({ value, onChange, placeholder, clas
               {s.display_name.replace(/,\s*Australia$/, '')}
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onFocus={() => { if (suggestions.length > 0) { setOpen(true); updatePos(); } }}
+        placeholder={placeholder ?? 'e.g. 12 Main St, Kirwan QLD 4817'}
+        autoComplete="off"
+        className={className ?? 'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400'}
+      />
+      {loading && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <span className="block h-3.5 w-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />
+        </div>
       )}
+      {dropdown}
     </div>
   );
 }
