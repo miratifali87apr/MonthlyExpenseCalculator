@@ -96,10 +96,26 @@ function oopTextColor(oop: number): string {
 
 // ─── Tab: Portfolio AI ────────────────────────────────────────────────────────
 
-function PortfolioTab({ properties }: { properties: Property[] }) {
+function monthlyAmt(amount: number, frequency: string): number {
+  if (frequency === 'weekly')      return amount * 52 / 12;
+  if (frequency === 'fortnightly') return amount * 26 / 12;
+  if (frequency === 'quarterly')   return amount / 3;
+  return amount; // monthly + ad_hoc
+}
+
+function PortfolioTab({ properties, templates }: { properties: Property[]; templates: RecurringTemplate[] }) {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<PortfolioAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  if (properties.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center text-slate-400 text-sm">
+        <p className="font-medium text-slate-500 mb-1">No properties yet</p>
+        <p>Add a property first to analyse your portfolio.</p>
+      </div>
+    );
+  }
 
   async function runAnalysis() {
     setLoading(true);
@@ -112,8 +128,16 @@ function PortfolioTab({ properties }: { properties: Property[] }) {
           address: p.address ?? '',
           purchase_price: p.purchase_price ?? null,
           loan_amount: p.loan_amount ?? null,
+          weekly_rent: p.weekly_rent ?? 0,
         })),
-        holding_costs: [],
+        holding_costs: templates
+          .filter(t => t.is_active)
+          .map(t => ({
+            property: properties.find(p => p.id === t.property_id)?.name ?? 'Personal',
+            name: t.name,
+            category: t.category,
+            monthly_amount: Math.round(monthlyAmt(Number(t.amount), t.frequency) * 100) / 100,
+          })),
         rental_income: properties.map((p) => ({
           property: p.name,
           weekly_rent: p.weekly_rent ?? 0,
@@ -280,6 +304,7 @@ function PredictorTab() {
   const [showTax, setShowTax] = useState(true);
   const [showCosts, setShowCosts] = useState(true);
   const [showDepreciation, setShowDepreciation] = useState(false);
+  const [showCostAssumptions, setShowCostAssumptions] = useState(false);
 
   // ── Parsed inputs ─────────────────────────────────────────────────────────
   const purchasePrice = parseFloat(form.purchase_price) || 0;
@@ -457,7 +482,7 @@ function PredictorTab() {
   const labelCls = 'block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5';
 
   return (
-    <div className="space-y-4 pb-36">
+    <div className="space-y-4 pb-56 md:pb-8">
 
       {/* Step 1 — Property Details */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -556,55 +581,79 @@ function PredictorTab() {
               <option value="NT">NT — Northern Territory</option>
             </select>
           </div>
-          <div>
-            <label className={labelCls}>Annual Council Rates</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
-              <input type="number" className={`${inputCls} pl-7 pr-10`} value={councilRates} onChange={(e) => setCouncilRates(e.target.value)} />
-              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>PM Fee</label>
-            <div className="relative">
-              <input type="number" step="0.1" className={`${inputCls} pr-8`} value={pmFeePct} onChange={(e) => setPmFeePct(e.target.value)} />
-              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>Water Rates</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
-              <input type="number" className={`${inputCls} pl-7 pr-10`} value={waterRates} onChange={(e) => setWaterRates(e.target.value)} />
-              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>Landlord Insurance</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
-              <input type="number" className={`${inputCls} pl-7 pr-10`} value={insuranceAmt} onChange={(e) => setInsuranceAmt(e.target.value)} />
-              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>Maintenance &amp; Repairs</label>
-            <div className="flex gap-2 items-center">
-              <div className="relative flex-1">
-                <input type="number" step="0.1" className={`${inputCls} pr-8`} value={maintenancePct} onChange={(e) => setMaintenancePct(e.target.value)} />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
-              </div>
-              <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">{purchasePrice > 0 ? formatCurrency(annualMaintenance) + '/yr' : '—'}</span>
-            </div>
-          </div>
-          {isUnitOrTownhouse && (
+        </div>
+
+        {/* Collapsible: cost assumptions */}
+        <div className="border-t border-slate-100">
+          <button
+            type="button"
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors text-left"
+            onClick={() => setShowCostAssumptions(v => !v)}
+          >
             <div>
-              <label className={labelCls}>Strata / Body Corporate</label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
-                <input type="number" className={`${inputCls} pl-7 pr-10`} value={strataFees} onChange={(e) => setStrataFees(e.target.value)} />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+              <span className="text-xs font-semibold text-slate-600">Ongoing cost assumptions</span>
+              {!showCostAssumptions && (
+                <span className="ml-2 text-xs text-slate-400">
+                  PM {pmFeePct}% · Rates {formatCurrency(annualCouncilRates + annualWaterRates)}/yr · Insurance {formatCurrency(annualInsurance)}/yr
+                </span>
+              )}
+            </div>
+            <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform duration-200 ${showCostAssumptions ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showCostAssumptions && (
+            <div className="px-5 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+              <div>
+                <label className={labelCls}>Annual Council Rates</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+                  <input type="number" className={`${inputCls} pl-7 pr-10`} value={councilRates} onChange={(e) => setCouncilRates(e.target.value)} />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+                </div>
               </div>
+              <div>
+                <label className={labelCls}>PM Fee</label>
+                <div className="relative">
+                  <input type="number" step="0.1" className={`${inputCls} pr-8`} value={pmFeePct} onChange={(e) => setPmFeePct(e.target.value)} />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Water Rates</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+                  <input type="number" className={`${inputCls} pl-7 pr-10`} value={waterRates} onChange={(e) => setWaterRates(e.target.value)} />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Landlord Insurance</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+                  <input type="number" className={`${inputCls} pl-7 pr-10`} value={insuranceAmt} onChange={(e) => setInsuranceAmt(e.target.value)} />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Maintenance &amp; Repairs</label>
+                <div className="flex gap-2 items-center">
+                  <div className="relative flex-1">
+                    <input type="number" step="0.1" className={`${inputCls} pr-8`} value={maintenancePct} onChange={(e) => setMaintenancePct(e.target.value)} />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">%</span>
+                  </div>
+                  <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">{purchasePrice > 0 ? formatCurrency(annualMaintenance) + '/yr' : '—'}</span>
+                </div>
+              </div>
+              {isUnitOrTownhouse && (
+                <div>
+                  <label className={labelCls}>Strata / Body Corporate</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+                    <input type="number" className={`${inputCls} pl-7 pr-10`} value={strataFees} onChange={(e) => setStrataFees(e.target.value)} />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs font-semibold">/yr</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -835,7 +884,7 @@ function PredictorTab() {
 
       {/* Sticky summary bar */}
       {hasCalcs && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 shadow-lg px-4 py-3">
+        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 shadow-lg px-4 py-3">
           <div className="max-w-2xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: 'Loan', value: formatCurrency(loanAmount), color: 'text-slate-900' },
@@ -1091,35 +1140,31 @@ function HoldingCostsTab({
     totalMonthly: number;
     weeklyRent: number;
     monthlyRent: number;
-    netOOP: number;
+    netCashflow: number;
   }
 
   const holdings: PropertyHolding[] = properties
     .map((prop) => {
       const propTemplates = templates.filter((t) => t.property_id === prop.id);
-      const totalMonthly = propTemplates.reduce((sum, t) => {
-        const amt = Number(t.amount) || 0;
-        if (t.frequency === 'monthly') return sum + amt;
-        if (t.frequency === 'quarterly') return sum + amt / 3;
-        if (t.frequency === 'weekly') return sum + (amt * 52) / 12;
-        if (t.frequency === 'fortnightly') return sum + (amt * 26) / 12;
-        return sum + amt; // ad_hoc treated as monthly
-      }, 0);
+      const totalMonthly = propTemplates.reduce((sum, t) =>
+        sum + monthlyAmt(Number(t.amount) || 0, t.frequency), 0);
 
       const weeklyRent = Number(prop.weekly_rent) || 0;
       const monthlyRent = (weeklyRent * 52) / 12;
-      const netOOP = Math.max(0, totalMonthly - monthlyRent);
+      // positive = out of pocket, negative = surplus
+      const netCashflow = totalMonthly - monthlyRent;
 
-      return { property: prop, monthlyTemplates: propTemplates, totalMonthly, weeklyRent, monthlyRent, netOOP };
+      return { property: prop, monthlyTemplates: propTemplates, totalMonthly, weeklyRent, monthlyRent, netCashflow };
     })
-    .sort((a, b) => b.netOOP - a.netOOP);
+    .sort((a, b) => b.netCashflow - a.netCashflow); // worst first
 
-  const grandTotal = holdings.reduce((sum, h) => sum + h.netOOP, 0);
+  const grandOOP = holdings.reduce((sum, h) => sum + Math.max(0, h.netCashflow), 0);
+  const grandSurplus = holdings.reduce((sum, h) => sum + Math.max(0, -h.netCashflow), 0);
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500">
-        Monthly out-of-pocket holding costs per property after rental income offsets.
+        Monthly cashflow per property after rental income offsets recurring holding costs.
       </p>
 
       {holdings.length === 0 && (
@@ -1128,73 +1173,73 @@ function HoldingCostsTab({
         </div>
       )}
 
-      {holdings.map(({ property, monthlyTemplates, totalMonthly, weeklyRent, monthlyRent, netOOP }) => (
-        <div
-          key={property.id}
-          className={`rounded-xl border-2 p-4 ${oopColor(netOOP)}`}
-        >
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <p className="font-semibold text-slate-900">{property.name}</p>
-              {property.address && (
-                <p className="text-xs text-slate-500">{property.address}</p>
+      {holdings.map(({ property, monthlyTemplates, totalMonthly, weeklyRent, monthlyRent, netCashflow }) => {
+        const isPositive = netCashflow <= 0; // surplus (rent > costs)
+        const cardBg = netCashflow > 1000 ? 'border-red-200 bg-red-50'
+          : netCashflow > 0 ? 'border-amber-200 bg-amber-50'
+          : 'border-green-200 bg-green-50';
+        const valueColor = isPositive ? 'text-green-700' : netCashflow > 1000 ? 'text-red-700' : 'text-amber-700';
+        return (
+          <div key={property.id} className={`rounded-xl border-2 p-4 ${cardBg}`}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="font-semibold text-slate-900">{property.name}</p>
+                {property.address && (
+                  <p className="text-xs text-slate-500">{property.address}</p>
+                )}
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-xs text-slate-500">{isPositive ? 'Surplus / month' : 'Out of pocket / month'}</p>
+                <p className={`text-xl font-bold ${valueColor}`}>
+                  {isPositive ? '+' : ''}{formatCurrency(Math.abs(netCashflow))}
+                </p>
+              </div>
+            </div>
+
+            {/* Template rows */}
+            {monthlyTemplates.length > 0 ? (
+              <div className="space-y-1 mb-3">
+                {monthlyTemplates.map((t) => {
+                  const monthly = monthlyAmt(Number(t.amount), t.frequency);
+                  return (
+                    <div key={t.id} className="flex justify-between text-sm">
+                      <span className="text-slate-600">{t.name}</span>
+                      <span className="text-slate-700 font-medium">{formatCurrency(monthly)}/mo</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic mb-3">No recurring templates — add them in Auto Bills.</p>
+            )}
+
+            {/* Totals */}
+            <div className="border-t border-current/20 pt-2 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-600">Total Monthly Costs</span>
+                <span className="font-medium text-slate-900">{formatCurrency(totalMonthly)}</span>
+              </div>
+              {weeklyRent > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Rental Income (${weeklyRent}/wk)</span>
+                  <span className="font-medium text-green-700">+{formatCurrency(monthlyRent)}</span>
+                </div>
               )}
             </div>
-            <div className="text-right shrink-0">
-              <p className="text-xs text-slate-500">Net OOP / month</p>
-              <p className={`text-xl font-bold ${oopTextColor(netOOP)}`}>
-                {formatCurrency(netOOP)}
-              </p>
-            </div>
           </div>
-
-          {/* Template rows */}
-          {monthlyTemplates.length > 0 ? (
-            <div className="space-y-1 mb-3">
-              {monthlyTemplates.map((t) => {
-                const monthly =
-                  t.frequency === 'monthly'
-                    ? Number(t.amount)
-                    : t.frequency === 'quarterly'
-                    ? Number(t.amount) / 3
-                    : t.frequency === 'weekly'
-                    ? (Number(t.amount) * 52) / 12
-                    : t.frequency === 'fortnightly'
-                    ? (Number(t.amount) * 26) / 12
-                    : Number(t.amount);
-                return (
-                  <div key={t.id} className="flex justify-between text-sm">
-                    <span className="text-slate-600">{t.name}</span>
-                    <span className="text-slate-700 font-medium">{formatCurrency(monthly)}/mo</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-slate-400 italic mb-3">No recurring templates.</p>
-          )}
-
-          {/* Totals */}
-          <div className="border-t border-current/20 pt-2 space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-600">Total Monthly Costs</span>
-              <span className="font-medium text-slate-900">{formatCurrency(totalMonthly)}</span>
-            </div>
-            {weeklyRent > 0 && (
-              <div className="flex justify-between">
-                <span className="text-slate-600">Rental Income (${weeklyRent}/wk)</span>
-                <span className="font-medium text-green-700">{formatCurrency(monthlyRent)}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* Grand total */}
       {holdings.length > 0 && (
-        <div className="rounded-xl border-2 border-slate-800 bg-slate-900 p-4 text-white flex items-center justify-between">
-          <span className="font-semibold">Grand Total Out of Pocket / Month</span>
-          <span className="text-2xl font-bold">{formatCurrency(grandTotal)}</span>
+        <div className="rounded-xl border-2 border-slate-800 bg-slate-900 p-4 text-white">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">Portfolio Net / Month</span>
+            <div className="text-right">
+              {grandOOP > 0 && <p className="text-red-400 font-bold">({formatCurrency(grandOOP)}) out of pocket</p>}
+              {grandSurplus > 0 && <p className="text-emerald-400 font-bold">+{formatCurrency(grandSurplus)} surplus</p>}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1204,7 +1249,7 @@ function HoldingCostsTab({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'portfolio', label: 'Portfolio AI' },
+  { id: 'portfolio', label: 'Portfolio Analysis' },
   { id: 'predictor', label: 'Purchase Predictor' },
   { id: 'holding', label: 'Holding Costs' },
 ];
@@ -1254,7 +1299,7 @@ export default function InsightsPage() {
       {/* Tab content */}
       {activeTab === 'portfolio' && (
         <ProGate feature="AI Portfolio Analysis">
-          <PortfolioTab properties={properties} />
+          <PortfolioTab properties={properties} templates={templates} />
         </ProGate>
       )}
       {activeTab === 'predictor' && (
