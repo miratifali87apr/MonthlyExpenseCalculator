@@ -516,12 +516,17 @@ async def extract_bill_text(
 
     # ---- Amount due ----
     amount = _find_amount([
-        r"(?:total\s*)?amount\s*(?:due|payable|owing)" + SEP + r"\$?([\d,]+\.?\d*)",
-        r"please\s*pay" + SEP + r"\$?([\d,]+\.?\d*)",
-        r"balance\s*(?:due|owing)" + SEP + r"\$?([\d,]+\.?\d*)",
-        r"total\s*(?:due|payable|charges?)" + SEP + r"\$?([\d,]+\.?\d*)",
-        r"(?:invoice|bill)\s*total" + SEP + r"\$?([\d,]+\.?\d*)",
-        r"(?:current\s*)?(?:charges?|amount)" + SEP + r"\$?([\d,]+\.?\d*)",
+        # Same-line matches
+        r"(?:total\s*)?amount\s*(?:due|payable|owing)" + SEP + r"\$?([\d,]+\.\d{2})",
+        r"please\s*pay" + SEP + r"\$?([\d,]+\.\d{2})",
+        r"balance\s*(?:due|owing)" + SEP + r"\$?([\d,]+\.\d{2})",
+        r"total\s*(?:due|payable|charges?)" + SEP + r"\$?([\d,]+\.\d{2})",
+        r"(?:invoice|bill)\s*total" + SEP + r"\$?([\d,]+\.\d{2})",
+        # Two-column PDFs: "Amount due" label then dollar amount on next line
+        r"(?:total\s*)?amount\s*(?:due|payable|owing)[\s\S]{0,40}?\$?([\d,]+\.\d{2})",
+        r"(?:your\s*bill|amount\s*due)[\s\S]{0,60}?\$\s*([\d,]+\.\d{2})",
+        # Tightly scoped fallback — require decimal cents to avoid round numbers like 10000
+        r"(?:^|\n)\s*\$\s*([\d,]+\.\d{2})\s*(?:\n|$)",
     ])
 
     # ---- Due date ----
