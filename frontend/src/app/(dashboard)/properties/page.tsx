@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { propertiesApi, recurringApi } from '@/lib/api';
 import { formatCurrency, CATEGORY_LABELS } from '@/lib/utils';
 import type { Property, RecurringTemplate } from '@/types';
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete';
 import { ChevronRight, Droplets, Home as HomeIcon, Plus, X, Upload, FileText, Sparkles, CheckCircle } from 'lucide-react';
 import { aiApi } from '@/lib/api';
 
@@ -335,11 +336,10 @@ function AddPropertyModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Address</label>
-            <input
-              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              placeholder="e.g. 12 Main St, Kirwan QLD 4817"
+            <AddressAutocomplete
               value={form.address}
-              onChange={e => update('address', e.target.value)}
+              onChange={v => update('address', v)}
+              placeholder="e.g. 12 Main St, Kirwan QLD 4817"
             />
           </div>
 
