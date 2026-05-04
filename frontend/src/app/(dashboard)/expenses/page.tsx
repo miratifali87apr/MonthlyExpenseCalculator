@@ -247,28 +247,38 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
+  const [scanSummary, setScanSummary] = useState<string[]>([]);
+  const [scannedFields, setScannedFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function update(field: keyof typeof form, value: string) {
     if (error) setError('');
+    // Clear scan highlight when user manually edits a field
+    setScannedFields(prev => { const n = new Set(prev); n.delete(field); return n; });
     setForm(f => ({ ...f, [field]: value }));
   }
 
   async function handleScanBill(file: File) {
     setScanning(true);
     setScanError('');
+    setScanSummary([]);
+    setScannedFields(new Set());
     try {
       const data = await aiApi.extractBillFree(file);
-      // Pre-fill form with extracted data
-      setForm(f => ({
-        ...f,
-        name: data.name || f.name,
-        amount: data.amount != null ? String(data.amount) : f.amount,
-        due_date: data.due_date || f.due_date,
-        category: data.category || f.category,
-        notes: data.notes || f.notes,
-      }));
-      // Auto-match property: check if any property name/address appears in the bill text
+      const filled: string[] = [];
+      const fields = new Set<string>();
+
+      setForm(f => {
+        const next = { ...f };
+        if (data.name) { next.name = data.name; filled.push(`Name: ${data.name}`); fields.add('name'); }
+        if (data.amount != null) { next.amount = String(data.amount); filled.push(`Amount: $${data.amount}`); fields.add('amount'); }
+        if (data.due_date) { next.due_date = data.due_date; filled.push(`Due: ${dayjs(data.due_date).format('D MMM YYYY')}`); fields.add('due_date'); }
+        if (data.category && data.category !== 'other') { next.category = data.category; filled.push(`Category: ${CATEGORY_LABELS[data.category as Category] ?? data.category}`); fields.add('category'); }
+        if (data.notes) { next.notes = data.notes; fields.add('notes'); }
+        return next;
+      });
+
+      // Auto-match property
       if (data._text_sample && properties.length > 0) {
         const sample = data._text_sample;
         const matched = properties.find(p => {
@@ -276,15 +286,28 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
           const addr = (p.address ?? '').toLowerCase();
           return sample.includes(name) || (addr.length > 3 && sample.includes(addr.split(' ')[0]));
         });
-        if (matched) setForm(f => ({ ...f, property_id: String(matched.id) }));
+        if (matched) {
+          setForm(f => ({ ...f, property_id: String(matched.id) }));
+          filled.push(`Property: ${matched.name}`);
+          fields.add('property_id');
+        }
       }
+
+      setScannedFields(fields);
+      setScanSummary(filled.length > 0 ? filled : []);
+      if (filled.length === 0) setScanError('Could not extract details — please fill in manually.');
     } catch (err) {
-      setScanError(err instanceof Error ? err.message : 'Scan failed. Try a clearer image.');
+      setScanError(err instanceof Error ? err.message : 'Scan failed. Try a clearer image or PDF.');
     } finally {
       setScanning(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
+
+  const scannedCls = (field: string) =>
+    scannedFields.has(field)
+      ? 'w-full border border-indigo-400 bg-indigo-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400'
+      : 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400';
 
   async function handleSave() {
     const parsedAmount = parseFloat(form.amount);
@@ -322,8 +345,15 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
           </button>
         </div>
         <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
-          {/* Scan Bill — upload any bill PDF/image to auto-fill the form */}
-          <label className={`flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${scanning ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'}`}>
+
+          {/* Scan Bill */}
+          <label className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+            scanning
+              ? 'border-indigo-300 bg-indigo-50'
+              : scanSummary.length > 0
+              ? 'border-emerald-300 bg-emerald-50'
+              : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'
+          }`}>
             <input
               ref={fileInputRef}
               type="file"
@@ -332,31 +362,61 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
               disabled={scanning}
               onChange={e => { const f = e.target.files?.[0]; if (f) handleScanBill(f); }}
             />
-            {scanning
-              ? <><span className="animate-spin h-4 w-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full shrink-0" /><span className="text-xs text-indigo-600 font-medium">Reading bill…</span></>
-              : <><span className="text-base">📷</span><span className="text-xs text-slate-500 font-medium">Scan bill to auto-fill <span className="text-indigo-600">— tap to upload PDF or photo</span></span></>
-            }
+            {scanning ? (
+              <>
+                <span className="animate-spin h-4 w-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full shrink-0" />
+                <span className="text-xs text-indigo-600 font-medium">Reading your bill…</span>
+              </>
+            ) : scanSummary.length > 0 ? (
+              <>
+                <span className="text-base shrink-0">✅</span>
+                <span className="text-xs text-emerald-700 font-medium">Scan done — upload again to re-scan</span>
+              </>
+            ) : (
+              <>
+                <span className="text-base shrink-0">📄</span>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Scan bill to auto-fill</p>
+                  <p className="text-xs text-slate-400">Upload a PDF or photo — fills name, amount & due date</p>
+                </div>
+              </>
+            )}
           </label>
+
+          {/* Scan success summary */}
+          {scanSummary.length > 0 && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+              <p className="text-xs font-semibold text-emerald-800 mb-1">Auto-filled from bill — please verify:</p>
+              <ul className="space-y-0.5">
+                {scanSummary.map((item, i) => (
+                  <li key={i} className="text-xs text-emerald-700 flex items-center gap-1.5">
+                    <span className="text-emerald-500">✓</span> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {scanError && <p className="text-xs text-red-600">{scanError}</p>}
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Expense Name *</label>
-            <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="e.g. Water Bill" value={form.name} onChange={e => update('name', e.target.value)} />
+            <input className={scannedCls('name')} placeholder="e.g. Water Bill" value={form.name} onChange={e => update('name', e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($) *</label>
-              <input type="number" step="0.01" min="0.01" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" placeholder="0.00" value={form.amount} onChange={e => update('amount', e.target.value)} />
+              <input type="number" step="0.01" min="0.01" className={scannedCls('amount')} placeholder="0.00" value={form.amount} onChange={e => update('amount', e.target.value)} />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Due Date *</label>
-              <input type="date" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.due_date} onChange={e => update('due_date', e.target.value)} />
+              <input type="date" className={scannedCls('due_date')} value={form.due_date} onChange={e => update('due_date', e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
-              <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.category} onChange={e => update('category', e.target.value)}>
+              <select className={`bg-white ${scannedCls('category')}`} value={form.category} onChange={e => update('category', e.target.value)}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
               </select>
             </div>
@@ -371,10 +431,19 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Property</label>
-            <select className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-400" value={form.property_id} onChange={e => update('property_id', e.target.value)}>
+            <select className={`bg-white ${scannedCls('property_id')}`} value={form.property_id} onChange={e => update('property_id', e.target.value)}>
               <option value="">No property (personal)</option>
               {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            {properties.length === 0 && (
+              <p className="text-xs text-slate-400 mt-1">
+                Have an investment property?{' '}
+                <a href="/properties" className="text-indigo-600 underline font-medium" onClick={onClose}>
+                  Add it in Properties
+                </a>{' '}
+                to link bills and track cashflow.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
