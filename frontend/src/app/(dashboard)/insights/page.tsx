@@ -568,7 +568,7 @@ function PredictorTab() {
               <option>Land</option>
             </select>
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className={labelCls}>State / Territory</label>
             <select className={`${inputCls}`} value={state} onChange={(e) => { setState(e.target.value as AusState); setResult(null); }}>
               <option value="QLD">QLD — Queensland</option>
@@ -594,7 +594,7 @@ function PredictorTab() {
               <span className="text-xs font-semibold text-slate-600">Ongoing cost assumptions</span>
               {!showCostAssumptions && (
                 <span className="ml-2 text-xs text-slate-400">
-                  PM {pmFeePct}% · Rates {formatCurrency(annualCouncilRates + annualWaterRates)}/yr · Insurance {formatCurrency(annualInsurance)}/yr
+                  PM {pmFeePct}% · Rates ${Math.round(annualCouncilRates + annualWaterRates).toLocaleString()}/yr · Insurance ${Math.round(annualInsurance).toLocaleString()}/yr
                 </span>
               )}
             </div>
