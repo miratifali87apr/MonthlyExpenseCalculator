@@ -11,8 +11,8 @@ import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import type { Property, RecurringTemplate } from '@/types';
 import {
-  MapPin, Building2, Receipt, TrendingUp, Sparkles,
-  AlertTriangle, ChevronDown, BarChart3, Calculator, Landmark,
+  MapPin, Building2, Receipt, TrendingUp,
+  AlertTriangle, ChevronDown, Calculator, Landmark,
 } from 'lucide-react';
 import { ProGate } from '@/components/ui/ProGate';
 import {
@@ -38,15 +38,6 @@ interface PortfolioAnalysis {
   property_rankings: PropertyRanking[];
 }
 
-interface PurchaseResult {
-  monthly_cashflow: number;
-  annual_yield: number;
-  recommendation: 'buy' | 'consider' | 'avoid';
-  confidence: number;
-  pros: string[];
-  cons: string[];
-  ai_summary: string;
-}
 
 type Tab = 'portfolio' | 'predictor' | 'holding';
 
@@ -76,11 +67,6 @@ function ratingVariant(rating: 'strong' | 'moderate' | 'weak'): 'success' | 'war
   return 'danger';
 }
 
-function recommendationVariant(rec: 'buy' | 'consider' | 'avoid'): 'success' | 'warning' | 'danger' {
-  if (rec === 'buy') return 'success';
-  if (rec === 'consider') return 'warning';
-  return 'danger';
-}
 
 function oopColor(oop: number): string {
   if (oop > 1000) return 'border-red-200 bg-red-50';
@@ -298,9 +284,6 @@ function PredictorTab() {
   // Projection
   const [growthRate, setGrowthRate] = useState('6');
 
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<PurchaseResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [showTax, setShowTax] = useState(true);
   const [showCosts, setShowCosts] = useState(true);
   const [showDepreciation, setShowDepreciation] = useState(false);
@@ -443,39 +426,8 @@ function PredictorTab() {
   const isLand = form.property_type === 'Land';
   const hasCalcs = purchasePrice > 0 && (weeklyRent > 0 || isLand);
 
-  async function getRecommendation() {
-    setLoading(true);
-    setError(null);
-    try {
-      const token = await getAuthToken();
-      const payload = {
-        purchase_price: purchasePrice,
-        loan_amount: loanAmount,
-        interest_rate: interestRate,
-        weekly_rent: weeklyRent,
-        property_type: form.property_type,
-        location: form.location,
-        existing_portfolio_context: `Portfolio in Finley, Kirwan, Chigwell. State: ${state}. Ownership: ${structure}. Stamp duty: ${formatCurrency(stampDuty)}. LMI: ${formatCurrency(lmi)}. Total cash required: ${formatCurrency(totalCashRequired)}. After-tax cashflow: ${formatCurrency(afterTaxMonthlyCashflow)}/mo. Land tax (${state}): ${formatCurrency(annualLandTax)}/yr. Net yield: ${netYield.toFixed(2)}%. Repayment: ${repaymentType.toUpperCase()}.`,
-      };
-      const res = await fetch(`${API_URL}/api/ai/purchase-predictor`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
-      setResult(await res.json());
-      setShowTax(false);
-      setShowCosts(false);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function update(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
-    setResult(null);
   }
 
   const inputCls = 'w-full border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium bg-white focus:outline-none focus:border-violet-500 transition-colors placeholder:text-slate-300 placeholder:font-normal';
@@ -535,7 +487,7 @@ function PredictorTab() {
             <label className={labelCls}>Repayment Type</label>
             <div className="flex gap-2">
               {(['io', 'pi'] as const).map((t) => (
-                <button key={t} onClick={() => { setRepaymentType(t); setResult(null); }}
+                <button key={t} onClick={() => { setRepaymentType(t); }}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${repaymentType === t ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300'}`}>
                   {t === 'io' ? 'Interest Only' : 'P&I'}
                 </button>
@@ -570,7 +522,7 @@ function PredictorTab() {
           </div>
           <div className="sm:col-span-2">
             <label className={labelCls}>State / Territory</label>
-            <select className={`${inputCls}`} value={state} onChange={(e) => { setState(e.target.value as AusState); setResult(null); }}>
+            <select className={`${inputCls}`} value={state} onChange={(e) => { setState(e.target.value as AusState); }}>
               <option value="QLD">QLD — Queensland</option>
               <option value="NSW">NSW — New South Wales</option>
               <option value="VIC">VIC — Victoria</option>
@@ -682,7 +634,7 @@ function PredictorTab() {
               ] as { value: OwnershipStructure; label: string; sub: string }[]).map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => { setStructure(opt.value); setResult(null); }}
+                  onClick={() => { setStructure(opt.value); }}
                   className={`py-3 px-2 rounded-xl text-xs font-semibold border-2 transition-all text-center ${
                     structure === opt.value
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100'
@@ -955,82 +907,6 @@ function PredictorTab() {
         </div>
       )}
 
-      {/* AI CTA Button */}
-      <button
-        onClick={getRecommendation}
-        disabled={loading || !purchasePrice || (!weeklyRent && !isLand)}
-        className="w-full relative overflow-hidden rounded-2xl px-6 py-5 flex items-center justify-center gap-4
-          bg-gradient-to-r from-violet-600 to-indigo-600 text-white
-          shadow-lg shadow-indigo-200 hover:shadow-xl hover:from-violet-700 hover:to-indigo-700
-          disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200"
-      >
-        {loading
-          ? <span className="animate-spin h-5 w-5 border-2 border-white/40 border-t-white rounded-full shrink-0" />
-          : <Sparkles className="w-6 h-6 shrink-0" />
-        }
-        <div className="text-left">
-          <p className="font-bold text-base leading-tight">{loading ? 'Claude is analysing…' : 'Get AI Recommendation'}</p>
-          <p className="text-xs text-indigo-200 mt-0.5">Powered by Claude AI — instant investment analysis</p>
-        </div>
-      </button>
-
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-
-      {/* AI Result */}
-      {result && !loading && (
-        <div className="space-y-4">
-          <div className={`rounded-2xl border-2 p-6 flex items-center justify-between ${
-            result.recommendation === 'buy' ? 'bg-emerald-50 border-emerald-300'
-            : result.recommendation === 'consider' ? 'bg-amber-50 border-amber-300'
-            : 'bg-red-50 border-red-300'
-          }`}>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">AI Verdict</p>
-              <Badge variant={recommendationVariant(result.recommendation)} className="text-base px-5 py-1.5 uppercase font-bold">
-                {result.recommendation}
-              </Badge>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-500 mb-1">Confidence</p>
-              <p className="text-5xl font-black text-slate-900">{result.confidence}%</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl border-2 border-emerald-100 p-4 shadow-sm">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-3">Pros</p>
-              <ul className="space-y-2.5">
-                {result.pros.map((pro, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm text-slate-700">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-black">✓</span>
-                    {pro}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="bg-white rounded-2xl border-2 border-red-100 p-4 shadow-sm">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-red-500 mb-3">Cons</p>
-              <ul className="space-y-2.5">
-                {result.cons.map((con, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm text-slate-700">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-xs font-black">✗</span>
-                    {con}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-violet-500" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">AI Analysis</p>
-            </div>
-            <p className="text-sm text-slate-700 leading-relaxed">{result.ai_summary}</p>
-          </div>
-        </div>
-      )}
-
       {/* Disclaimer */}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-4">
         {/* Header */}
@@ -1249,13 +1125,13 @@ function HoldingCostsTab({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'portfolio', label: 'Portfolio Analysis' },
-  { id: 'predictor', label: 'Purchase Predictor' },
   { id: 'holding', label: 'Holding Costs' },
+  { id: 'predictor', label: 'Property Calculator' },
+  { id: 'portfolio', label: 'Portfolio Analysis' },
 ];
 
 export default function InsightsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('predictor');
+  const [activeTab, setActiveTab] = useState<Tab>('holding');
 
   const { data: properties = [], isLoading: propsLoading } = useQuery({
     queryKey: ['properties'],
@@ -1303,7 +1179,7 @@ export default function InsightsPage() {
         </ProGate>
       )}
       {activeTab === 'predictor' && (
-        <ProGate feature="AI Purchase Predictor">
+        <ProGate feature="Property Calculator">
           <PredictorTab />
         </ProGate>
       )}
