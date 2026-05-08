@@ -247,6 +247,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (hasGenerated.current) return;
     hasGenerated.current = true;
+
+    // Only generate once per day — skip on subsequent page visits to avoid unnecessary
+    // POST requests that add latency on every dashboard load.
+    const GENERATE_KEY = 'cfw_last_generate';
+    const today = new Date().toDateString();
+    if (typeof window !== 'undefined' && localStorage.getItem(GENERATE_KEY) === today) return;
+
     const now = new Date();
     const m = now.getMonth() + 1;
     const y = now.getFullYear();
@@ -254,6 +261,7 @@ export default function DashboardPage() {
     const ny = m === 12 ? y + 1 : y;
     Promise.all([recurringApi.generate(m, y), recurringApi.generate(nm, ny)])
       .then(([a, b]) => {
+        if (typeof window !== 'undefined') localStorage.setItem(GENERATE_KEY, today);
         const total = (a.generated ?? 0) + (b.generated ?? 0);
         if (total > 0) {
           toast.success(`${total} bill${total > 1 ? 's' : ''} auto-generated`);

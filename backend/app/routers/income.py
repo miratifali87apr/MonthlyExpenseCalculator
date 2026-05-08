@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app import models
@@ -21,7 +21,11 @@ def list_income(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.IncomeItem).filter(models.IncomeItem.user_id == current_user.id)
+    query = (
+        db.query(models.IncomeItem)
+        .options(joinedload(models.IncomeItem.property))
+        .filter(models.IncomeItem.user_id == current_user.id)
+    )
 
     if type is not None:
         query = query.filter(models.IncomeItem.type == type)

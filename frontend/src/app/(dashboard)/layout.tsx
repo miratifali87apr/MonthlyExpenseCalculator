@@ -2,24 +2,35 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { dashboardApi } from '@/lib/api';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { MobileNav } from '@/components/layout/MobileNav';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [userEmail, setUserEmail] = useState<string | undefined>();
   const [userName, setUserName] = useState<string | undefined>();
   const [isChecking, setIsChecking] = useState(true);
   const [slowLoad, setSlowLoad] = useState(false);
 
-  // Warm up the Render backend immediately on mount — it sleeps after inactivity
+  // Fire authenticated dashboard prefetch as early as possible — before the page mounts.
+  // This puts the request in-flight immediately instead of waiting for the page component
+  // to mount, shaving significant perceived load time off the first render.
   useEffect(() => {
-    fetch(`${API_URL}/api/auth/me`).catch(() => {});
-  }, []);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        queryClient.prefetchQuery({
+          queryKey: ['dashboard'],
+          queryFn: () => dashboardApi.getSummary(),
+          staleTime: 30_000,
+        });
+      }
+    });
+  }, [queryClient]);
 
   // Show "warming up" message if auth check takes > 5s (backend cold start)
   useEffect(() => {

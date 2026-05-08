@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app import models
@@ -40,7 +40,11 @@ def list_expenses(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.ExpenseItem).filter(models.ExpenseItem.user_id == current_user.id)
+    query = (
+        db.query(models.ExpenseItem)
+        .options(joinedload(models.ExpenseItem.property))
+        .filter(models.ExpenseItem.user_id == current_user.id)
+    )
 
     if month is not None and year is not None:
         query = query.filter(models.ExpenseItem.due_date != None)  # noqa: E711
