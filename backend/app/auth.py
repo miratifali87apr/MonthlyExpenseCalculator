@@ -1,6 +1,7 @@
 import os
 import json
 import secrets
+import time
 import urllib.request
 from datetime import datetime, timedelta
 from typing import Optional
@@ -20,6 +21,23 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fxpwhhtwuwqyclrkhexg.supabase.co")
 _supabase_jwks: Optional[dict] = None
+
+# ── User cache ────────────────────────────────────────────────────────────────
+# Caches the user row in memory keyed by email so we skip a DB round-trip
+# (Oregon → Mumbai, ~250 ms) on every API request. TTL = 5 minutes.
+_USER_CACHE: dict[str, tuple[models.User, float]] = {}
+_USER_CACHE_TTL = 300  # seconds
+
+
+def _cache_get(email: str) -> Optional[models.User]:
+    entry = _USER_CACHE.get(email)
+    if entry and (time.monotonic() - entry[1]) < _USER_CACHE_TTL:
+        return entry[0]
+    return None
+
+
+def _cache_set(user: models.User) -> None:
+    _USER_CACHE[user.email] = (user, time.monotonic())
 
 
 def _get_supabase_jwks() -> dict:
@@ -62,6 +80,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def _find_or_create_user(email: str, name: str, db: Session) -> models.User:
+    cached = _cache_get(email)
+    if cached:
+        return cached
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
         user = models.User(
@@ -72,6 +93,7 @@ def _find_or_create_user(email: str, name: str, db: Session) -> models.User:
         db.add(user)
         db.commit()
         db.refresh(user)
+    _cache_set(user)
     return user
 
 
