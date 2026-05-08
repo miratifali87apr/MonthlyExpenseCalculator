@@ -346,58 +346,7 @@ function AddExpenseModal({ onClose, onSaved, properties }: { onClose: () => void
         </div>
         <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
 
-          {/* Scan Bill */}
-          <label className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
-            scanning
-              ? 'border-indigo-300 bg-indigo-50'
-              : scanSummary.length > 0
-              ? 'border-emerald-300 bg-emerald-50'
-              : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'
-          }`}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,application/pdf,.pdf"
-              className="sr-only"
-              disabled={scanning}
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleScanBill(f); }}
-            />
-            {scanning ? (
-              <>
-                <span className="animate-spin h-4 w-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full shrink-0" />
-                <span className="text-xs text-indigo-600 font-medium">Reading your bill…</span>
-              </>
-            ) : scanSummary.length > 0 ? (
-              <>
-                <span className="text-base shrink-0">✅</span>
-                <span className="text-xs text-emerald-700 font-medium">Scan done — upload again to re-scan</span>
-              </>
-            ) : (
-              <>
-                <span className="text-base shrink-0">📄</span>
-                <div>
-                  <p className="text-xs font-semibold text-slate-700">Scan bill to auto-fill</p>
-                  <p className="text-xs text-slate-400">Upload a PDF or photo — fills name, amount & due date</p>
-                </div>
-              </>
-            )}
-          </label>
-
-          {/* Scan success summary */}
-          {scanSummary.length > 0 && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
-              <p className="text-xs font-semibold text-emerald-800 mb-1">Auto-filled from bill — please verify:</p>
-              <ul className="space-y-0.5">
-                {scanSummary.map((item, i) => (
-                  <li key={i} className="text-xs text-emerald-700 flex items-center gap-1.5">
-                    <span className="text-emerald-500">✓</span> {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {scanError && <p className="text-xs text-red-600">{scanError}</p>}
+          {/* Scan Bill — hidden until feature is fully tested */}
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Expense Name *</label>
