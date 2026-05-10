@@ -6,6 +6,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { DashboardSkeleton } from '@/components/ui/Skeleton';
+import { AICopilotStrip } from '@/components/AICopilotStrip';
 import { Button } from '@/components/ui/Button';
 import { dashboardApi, expensesApi, recurringApi, exportApi } from '@/lib/api';
 import { formatCurrency, formatDate, formatMonth } from '@/lib/utils';
@@ -311,6 +312,14 @@ export default function DashboardPage() {
   const netPositive = data.net_cashflow >= 0;
   const currentMonth = dayjs().format('MMMM YYYY');
 
+  // Month-on-month delta from 6-month trend
+  const trend = data.cashflow_trend ?? [];
+  const prevMonthNet = trend.length >= 2
+    ? trend[trend.length - 2].income - trend[trend.length - 2].expenses
+    : null;
+  const delta = prevMonthNet !== null ? data.net_cashflow - prevMonthNet : null;
+  const deltaPositive = delta !== null && delta >= 0;
+
   // Merge upcoming + overdue into one action list, deduplicated
   const allActionItems: ExpenseItem[] = [
     ...data.overdue_items,
@@ -329,9 +338,10 @@ export default function DashboardPage() {
     <div className="space-y-5 max-w-4xl mx-auto">
 
       {/* ── Hero Card ───────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 p-6 md:p-8 relative overflow-hidden">
-        {/* Subtle glow */}
-        <div className="absolute top-0 right-0 w-48 h-48 bg-violet-600/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl pointer-events-none" />
+      <div className="rounded-2xl bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] p-6 md:p-8 relative overflow-hidden">
+        {/* Glows */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/15 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-40 h-40 bg-indigo-500/10 rounded-full translate-y-1/2 -translate-x-1/4 blur-3xl pointer-events-none" />
 
         <div className="relative">
           <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-1">{currentMonth}</p>
@@ -341,35 +351,50 @@ export default function DashboardPage() {
             <p className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-none">
               {formatCurrency(Math.abs(data.net_cashflow))}
             </p>
-            <div className={`flex items-center gap-1.5 mb-1 px-3 py-1.5 rounded-full text-xs font-bold ${
-              netPositive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
-            }`}>
-              {netPositive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-              {netPositive ? 'Positive' : 'Negative'}
+            <div className="flex flex-col gap-1.5 mb-1">
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
+                netPositive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+              }`}>
+                {netPositive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                {netPositive ? 'Positive' : 'Negative'}
+              </div>
+              {delta !== null && (
+                <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold ${
+                  deltaPositive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                }`}>
+                  {deltaPositive ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                  {deltaPositive ? '+' : ''}{formatCurrency(delta)} vs last month
+                </div>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-5">
             <div className="bg-white/8 rounded-xl px-4 py-3 border border-white/10">
               <p className="text-xs text-white/40 font-medium mb-1">Total Income</p>
-              <p className="text-xl font-bold text-emerald-300">{formatCurrency(data.total_monthly_income)}</p>
+              <p className="text-xl font-bold text-emerald-400">{formatCurrency(data.total_monthly_income)}</p>
             </div>
             <div className="bg-white/8 rounded-xl px-4 py-3 border border-white/10">
               <p className="text-xs text-white/40 font-medium mb-1">Total Bills</p>
-              <p className="text-xl font-bold text-white">{formatCurrency(data.total_monthly_expenses)}</p>
+              <p className={`text-xl font-bold ${data.overdue_items?.length > 0 ? 'text-rose-400' : 'text-white/90'}`}>
+                {formatCurrency(data.total_monthly_expenses)}
+              </p>
             </div>
           </div>
 
           <button
             onClick={() => downloadTaxExport(setExportingFY)}
             disabled={exportingFY}
-            className="flex items-center gap-2 text-white/50 hover:text-white/80 text-xs font-medium transition-colors disabled:opacity-40"
+            className="flex items-center gap-2 text-white/40 hover:text-white/70 text-xs font-medium transition-colors disabled:opacity-40"
           >
             <FileDown size={13} />
             {exportingFY ? 'Preparing…' : 'Download Tax Year Summary'}
           </button>
         </div>
       </div>
+
+      {/* ── AI Copilot Strip ────────────────────────────────────────────────── */}
+      <AICopilotStrip />
 
       {/* ── Quick Stats Row ─────────────────────────────────────────────────── */}
       <div className="flex gap-3 overflow-x-auto pb-1">
