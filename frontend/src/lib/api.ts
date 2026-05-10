@@ -155,6 +155,15 @@ export const propertiesApi = {
     request<PropertySummary>(`/api/properties/${id}/summary`),
 };
 
+// AI Copilot Chat
+export const chatApi = {
+  send: (message: string, history: { role: 'user' | 'assistant'; content: string }[]) =>
+    request<{ reply: string }>('/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, history }),
+    }),
+};
+
 // AI
 export const aiApi = {
   extractProperty: async (file: File): Promise<{

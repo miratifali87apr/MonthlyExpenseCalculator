@@ -1,15 +1,163 @@
 import os
 import base64
 import json
+from datetime import datetime, timezone
+from typing import List
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
 from app import models
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# AI Copilot Chat
+# ---------------------------------------------------------------------------
+
+class ChatMessage(BaseModel):
+    role: str   # "user" or "assistant"
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[ChatMessage] = []
+
+
+def _build_financial_context(user: models.User, db: Session) -> str:
+    """Gather the user's live financial data and format it for the AI system prompt."""
+    now = datetime.now(timezone.utc)
+    current_month = now.month
+    current_year = now.year
+
+    # Expenses
+    all_expenses = (
+        db.query(models.ExpenseItem)
+        .options(joinedload(models.ExpenseItem.property))
+        .filter(models.ExpenseItem.user_id == user.id)
+        .all()
+    )
+    this_month_expenses = [
+        e for e in all_expenses
+        if e.due_date and e.due_date.year == current_year and e.due_date.month == current_month
+    ]
+    overdue = [e for e in all_expenses if e.status in ("pending", "overdue") and e.due_date and e.due_date < now]
+    upcoming = [e for e in all_expenses if e.due_date and e.due_date >= now and e.status not in ("paid",)][:10]
+
+    # Income
+    all_income = (
+        db.query(models.IncomeItem)
+        .options(joinedload(models.IncomeItem.property))
+        .filter(models.IncomeItem.user_id == user.id)
+        .all()
+    )
+    recurring_income = [i for i in all_income if i.is_recurring]
+
+    # Properties
+    properties = db.query(models.Property).filter(models.Property.user_id == user.id).all()
+
+    # Monthly totals
+    total_expenses = sum(float(e.amount) for e in this_month_expenses)
+    total_income = sum(
+        float(i.amount) * (52 / 12 if i.frequency == "weekly" else 26 / 12 if i.frequency == "fortnightly" else 1)
+        for i in recurring_income
+    )
+    net = total_income - total_expenses
+
+    lines = [
+        f"Today: {now.strftime('%d %B %Y')}",
+        f"User: {user.name} ({user.email}), Plan: {user.plan or 'free'}",
+        "",
+        f"=== THIS MONTH ({now.strftime('%B %Y')}) ===",
+        f"Total Income: ${total_income:,.2f}",
+        f"Total Expenses: ${total_expenses:,.2f}",
+        f"Net Cashflow: ${net:,.2f} ({'POSITIVE' if net >= 0 else 'NEGATIVE'})",
+        "",
+        f"=== PROPERTIES ({len(properties)}) ===",
+    ]
+    for p in properties:
+        lines.append(f"- {p.name}: weekly rent ${float(p.weekly_rent or 0):.0f}, PM fee {float(p.pm_fee_pct or 0)*100:.1f}%")
+
+    lines.append(f"\n=== OVERDUE BILLS ({len(overdue)}) ===")
+    for e in overdue[:10]:
+        prop = e.property.name if e.property else "personal"
+        lines.append(f"- {e.name}: ${float(e.amount):,.2f} due {e.due_date.strftime('%d %b')} [{prop}]")
+
+    lines.append(f"\n=== UPCOMING BILLS ===")
+    for e in upcoming[:10]:
+        prop = e.property.name if e.property else "personal"
+        lines.append(f"- {e.name}: ${float(e.amount):,.2f} due {e.due_date.strftime('%d %b')} [{prop}] status={e.status}")
+
+    lines.append(f"\n=== INCOME STREAMS ===")
+    for i in all_income[:15]:
+        prop = i.property.name if i.property else "personal"
+        lines.append(f"- {i.name} ({i.type}): ${float(i.amount):,.2f} [{prop}]")
+
+    lines.append(f"\n=== ALL EXPENSES THIS MONTH ===")
+    for e in this_month_expenses[:20]:
+        lines.append(f"- {e.name}: ${float(e.amount):,.2f} [{e.category}] status={e.status}")
+
+    return "\n".join(lines)
+
+
+@router.post("/chat")
+def ai_chat(
+    body: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """AI Copilot — answers questions about the user's personal finances."""
+    context = _build_financial_context(current_user, db)
+
+    system_prompt = f"""You are CashflowWise Copilot, a friendly and sharp AI financial assistant built into the CashflowWise app for Australian property investors.
+
+You have access to this user's live financial data:
+
+{context}
+
+Rules:
+- Answer in plain, conversational Australian English. Be concise and direct.
+- Use dollar amounts and specific numbers from the data above whenever relevant.
+- If asked about something not in the data, say so honestly and suggest how to add it.
+- Never make up numbers. Only use what's in the data above.
+- Format responses with short paragraphs or bullet points. Keep it under 150 words unless the question truly needs more.
+- You can make observations the user hasn't asked for if they're important (e.g. a large overdue bill).
+- Do not give generic financial advice. Be specific to this user's actual numbers."""
+
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+
+    messages = [{"role": m.role, "content": m.content} for m in body.history]
+    messages.append({"role": "user", "content": body.message})
+
+    if openai_key:
+        from openai import OpenAI
+        client = OpenAI(api_key=openai_key)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",   # cheap + fast, perfect for chat
+            messages=[{"role": "system", "content": system_prompt}] + messages,
+            max_tokens=400,
+            temperature=0.4,
+        )
+        reply = resp.choices[0].message.content.strip()
+    elif anthropic_key:
+        from anthropic import Anthropic
+        client = Anthropic(api_key=anthropic_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            system=system_prompt,
+            messages=messages,
+        )
+        reply = resp.content[0].text.strip()
+    else:
+        raise HTTPException(status_code=503, detail="No AI key configured.")
+
+    return {"reply": reply}
 
 # ---------------------------------------------------------------------------
 # AI client — prefers OpenAI if OPENAI_API_KEY is set, falls back to Anthropic
