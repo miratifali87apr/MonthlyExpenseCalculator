@@ -40,6 +40,14 @@ def get_dashboard_summary(
     window_7 = now + timedelta(days=7)
     window_30 = now + timedelta(days=30)
 
+    def _dt(d):
+        """Make a naive datetime timezone-aware (UTC) so Python comparisons don't crash."""
+        if d is None:
+            return None
+        if d.tzinfo is None:
+            return d.replace(tzinfo=timezone.utc)
+        return d
+
     # ------------------------------------------------------------------
     # Single query for ALL user expenses — with property eagerly loaded
     # to eliminate N+1 lazy-load queries on serialisation.
@@ -59,20 +67,20 @@ def get_dashboard_summary(
     ]
     upcoming_7_raw = [
         e for e in all_expenses
-        if e.due_date and now <= e.due_date <= window_7 and e.status != "paid"
+        if e.due_date and now <= _dt(e.due_date) <= window_7 and e.status != "paid"
     ]
     upcoming_30_raw = [
         e for e in all_expenses
-        if e.due_date and now <= e.due_date <= window_30 and e.status != "paid"
+        if e.due_date and now <= _dt(e.due_date) <= window_30 and e.status != "paid"
     ]
     overdue_raw = sorted(
-        [e for e in all_expenses if e.due_date and e.due_date < now and e.status in ("pending", "overdue")],
+        [e for e in all_expenses if e.due_date and _dt(e.due_date) < now and e.status in ("pending", "overdue")],
         key=lambda e: e.due_date,
         reverse=True,
     )
     next_unfunded_raw = [
         e for e in all_expenses
-        if e.due_date and e.due_date >= now and e.status == "pending"
+        if e.due_date and _dt(e.due_date) >= now and e.status == "pending"
     ][:7]
 
     # ------------------------------------------------------------------
