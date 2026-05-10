@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, X, Send, ChevronDown } from 'lucide-react';
+import { Sparkles, Send, ChevronDown } from 'lucide-react';
 import { chatApi } from '@/lib/api';
 
 type Message = { role: 'user' | 'assistant'; content: string };
@@ -74,7 +74,7 @@ export function AICopilot() {
       {/* Chat panel */}
       {open && (
         <div className="fixed bottom-36 right-4 md:bottom-20 md:right-6 z-50 w-[calc(100vw-2rem)] max-w-sm bg-white rounded-2xl shadow-2xl shadow-slate-900/20 border border-slate-100 flex flex-col overflow-hidden"
-          style={{ height: '480px' }}
+          style={{ height: 'min(480px, calc(100dvh - 160px))' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 shrink-0">

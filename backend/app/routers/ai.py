@@ -62,8 +62,16 @@ def _build_financial_context(user: models.User, db: Session) -> str:
 
     # Monthly totals
     total_expenses = sum(float(e.amount) for e in this_month_expenses)
+    def _to_monthly(amount: float, freq: str) -> float:
+        f = (freq or "monthly").lower()
+        if f == "weekly": return amount * 52 / 12
+        if f == "fortnightly": return amount * 26 / 12
+        if f == "quarterly": return amount / 3
+        if f == "yearly": return amount / 12
+        return amount  # monthly / ad_hoc
+
     total_income = sum(
-        float(i.amount) * (52 / 12 if i.frequency == "weekly" else 26 / 12 if i.frequency == "fortnightly" else 1)
+        _to_monthly(float(i.amount), i.frequency or "monthly")
         for i in recurring_income
     )
     net = total_income - total_expenses
