@@ -620,8 +620,10 @@ export default function ExpensesPage() {
 
   const queryKey = ['expenses', month, year, status, category];
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey,
+    retry: 3,
+    retryDelay: (i) => Math.min(1000 * 2 ** i, 8000),
     queryFn: () =>
       expensesApi.list({
         month,
@@ -852,7 +854,13 @@ export default function ExpensesPage() {
         {isLoading ? (
           <TableSkeleton rows={7} cols={7} />
         ) : error ? (
-          <p className="text-sm text-red-600">Failed to load expenses.</p>
+          <div className="flex flex-col items-center py-10 gap-3">
+            <p className="text-sm text-slate-600 font-medium">Couldn't load expenses</p>
+            <button onClick={() => refetch()} disabled={isFetching}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
+              {isFetching ? 'Retrying…' : 'Try Again'}
+            </button>
+          </div>
         ) : viewMode === 'chart' ? (
           <ChartView items={sorted} />
         ) : sorted.length === 0 ? (

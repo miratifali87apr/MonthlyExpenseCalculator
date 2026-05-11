@@ -272,9 +272,11 @@ export default function DashboardPage() {
       }).catch(() => {});
   }, [queryClient]);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => dashboardApi.getSummary(),
+    retry: 3,
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 8000),
   });
 
   const handleMarkPaid = async (id: number) => {
@@ -298,7 +300,21 @@ export default function DashboardPage() {
   };
 
   if (isLoading) return <DashboardSkeleton />;
-  if (error) return <div className="text-red-600 p-4 text-sm">Failed to load dashboard.</div>;
+  if (error) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+      <div className="text-center">
+        <p className="text-sm font-semibold text-slate-700 mb-1">Couldn't load your dashboard</p>
+        <p className="text-xs text-slate-400">Check your connection and try again</p>
+      </div>
+      <button
+        onClick={() => refetch()}
+        disabled={isFetching}
+        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+      >
+        {isFetching ? 'Retrying…' : 'Try Again'}
+      </button>
+    </div>
+  );
   if (!data) return null;
 
   const isEmpty =
