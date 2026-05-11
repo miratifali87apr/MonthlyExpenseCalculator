@@ -30,10 +30,14 @@
     },
     "extra": {
       "supabaseUrl": "https://fxpwhhtwuwqyclrkhexg.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4cHdoaHR3dXdxeWNscmtoZXhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MjQ2MjgsImV4cCI6MjA4OTUwMDYyOH0.dDHLfdMqoMo28rHCX1zEhc9T7KB7fwZueZYoA6-Q90I"
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4cHdoaHR3dXdxeWNscmtoZXhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MjQ2MjgsImV4cCI6MjA4OTUwMDYyOH0.dDHLfdMqoMo28rHCX1zEhc9T7KB7fwZueZYoA6-Q90I",
+      "eas": {
+        "projectId": "e964799c-8edb-4d18-b0a8-d9267ae2a067"
+      }
     },
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "owner": "cashflowwise"
   }
 }
