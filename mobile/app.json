@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Finance Tracker",
-    "slug": "finance-tracker",
+    "name": "CashflowWise",
+    "slug": "cashflowwise",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.financetracker.app"
+      "bundleIdentifier": "com.cashflowwise.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +22,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.financetracker.app",
+      "package": "com.cashflowwise.app",
       "predictiveBackGestureEnabled": false
     },
     "web": {

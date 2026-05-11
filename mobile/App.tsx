@@ -93,7 +93,7 @@ export default function App() {
         <View style={styles.splashLogoWrap}>
           <Text style={styles.splashLogo}>$</Text>
         </View>
-        <Text style={styles.splashTitle}>Finance Tracker</Text>
+        <Text style={styles.splashTitle}>CashflowWise</Text>
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 24 }} />
       </View>
     );

@@ -53,7 +53,7 @@ export function LoginScreen() {
             <View style={styles.logoCircle}>
               <Text style={styles.logoIcon}>$</Text>
             </View>
-            <Text style={styles.logoTitle}>Finance Tracker</Text>
+            <Text style={styles.logoTitle}>CashflowWise</Text>
             <Text style={styles.logoSub}>Property & personal finance management</Text>
           </View>
 
@@ -130,7 +130,7 @@ export function LoginScreen() {
           </View>
 
           <Text style={styles.footer}>
-            Finance Tracker • Australian Property Management
+            CashflowWise • Australian Property Management
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
