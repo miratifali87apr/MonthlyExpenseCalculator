@@ -639,8 +639,8 @@ export default function ExpensesPage() {
     setActionId(id);
     try {
       await expensesApi.pay(id);
-      await invalidate();
       toast.success('Marked as paid');
+      invalidate(); // fire-and-forget — don't let refetch failure affect the action
     } catch {
       toast.error('Failed to mark as paid');
     } finally {
@@ -653,8 +653,8 @@ export default function ExpensesPage() {
     setActionId(id);
     try {
       await expensesApi.delete(id);
-      await invalidate();
       toast.success('Expense deleted');
+      invalidate();
     } catch {
       toast.error('Failed to delete expense');
     } finally {
@@ -853,7 +853,7 @@ export default function ExpensesPage() {
       <Card>
         {isLoading ? (
           <TableSkeleton rows={7} cols={7} />
-        ) : error ? (
+        ) : (error && !data) ? (
           <div className="flex flex-col items-center py-10 gap-3">
             <p className="text-sm text-slate-600 font-medium">Couldn't load expenses</p>
             <button onClick={() => refetch()} disabled={isFetching}
