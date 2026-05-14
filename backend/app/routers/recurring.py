@@ -1,6 +1,6 @@
 
 import calendar
-from datetime import datetime, timezone
+from datetime import date as date_type, datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -136,9 +136,6 @@ def generate_from_templates(
 
         day = template.day_of_month or 1
         max_day = calendar.monthrange(target_year, target_month)[1]
-        clamped_day = min(day, max_day)
-
-        due_dt = datetime(target_year, target_month, clamped_day, tzinfo=timezone.utc)
 
         existing = (
             db.query(models.ExpenseItem)
@@ -149,31 +146,60 @@ def generate_from_templates(
             )
             .all()
         )
-        already_exists = any(
-            e.due_date and e.due_date.year == target_year and e.due_date.month == target_month
-            for e in existing
-        )
-        if already_exists:
-            continue
 
-        item_status = "pending"
-        if due_dt < now:
-            item_status = "overdue"
+        # For weekly/fortnightly, generate one expense per occurrence in the month
+        if template.frequency in ("weekly", "fortnightly"):
+            step = 7 if template.frequency == "weekly" else 14
+            existing_dates = {
+                e.due_date.date() for e in existing if e.due_date
+            }
+            current_day = min(day, max_day)
+            while current_day <= max_day:
+                occurrence_date = date_type(target_year, target_month, current_day)
+                if occurrence_date not in existing_dates:
+                    due_dt = datetime(target_year, target_month, current_day, tzinfo=timezone.utc)
+                    item_status = "overdue" if due_dt < now else "pending"
+                    expense = models.ExpenseItem(
+                        name=template.name,
+                        category=template.category,
+                        amount=template.amount,
+                        due_date=due_dt,
+                        status=item_status,
+                        property_id=template.property_id,
+                        template_id=template.id,
+                        is_recurring=True,
+                        notes=template.notes,
+                        user_id=current_user.id,
+                    )
+                    db.add(expense)
+                    generated_count += 1
+                current_day += step
+        else:
+            # Single occurrence per month (monthly, quarterly, ad_hoc, yearly)
+            already_exists = any(
+                e.due_date and e.due_date.year == target_year and e.due_date.month == target_month
+                for e in existing
+            )
+            if already_exists:
+                continue
 
-        expense = models.ExpenseItem(
-            name=template.name,
-            category=template.category,
-            amount=template.amount,
-            due_date=due_dt,
-            status=item_status,
-            property_id=template.property_id,
-            template_id=template.id,
-            is_recurring=True,
-            notes=template.notes,
-            user_id=current_user.id,
-        )
-        db.add(expense)
-        generated_count += 1
+            clamped_day = min(day, max_day)
+            due_dt = datetime(target_year, target_month, clamped_day, tzinfo=timezone.utc)
+            item_status = "overdue" if due_dt < now else "pending"
+            expense = models.ExpenseItem(
+                name=template.name,
+                category=template.category,
+                amount=template.amount,
+                due_date=due_dt,
+                status=item_status,
+                property_id=template.property_id,
+                template_id=template.id,
+                is_recurring=True,
+                notes=template.notes,
+                user_id=current_user.id,
+            )
+            db.add(expense)
+            generated_count += 1
 
     db.commit()
     return {"generated": generated_count}
