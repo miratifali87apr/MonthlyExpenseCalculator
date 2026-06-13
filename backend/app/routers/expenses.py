@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
+from sqlalchemy import extract
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -37,6 +38,8 @@ def list_expenses(
     property_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -46,33 +49,24 @@ def list_expenses(
         .filter(models.ExpenseItem.user_id == current_user.id)
     )
 
-    if month is not None and year is not None:
-        query = query.filter(models.ExpenseItem.due_date != None)  # noqa: E711
-        items = query.order_by(models.ExpenseItem.due_date.desc()).all()
-        items = [
-            i for i in items
-            if i.due_date and i.due_date.year == year and i.due_date.month == month
-        ]
-    elif year is not None:
-        items = query.order_by(models.ExpenseItem.due_date.desc()).all()
-        items = [i for i in items if i.due_date and i.due_date.year == year]
-    else:
-        if property_id is not None:
-            query = query.filter(models.ExpenseItem.property_id == property_id)
-        if status is not None:
-            query = query.filter(models.ExpenseItem.status == status)
-        if category is not None:
-            query = query.filter(models.ExpenseItem.category == category)
-        items = query.order_by(models.ExpenseItem.due_date.desc()).all()
+    if year is not None:
+        query = query.filter(
+            models.ExpenseItem.due_date.isnot(None),
+            extract("year", models.ExpenseItem.due_date) == year,
+        )
+    if month is not None:
+        query = query.filter(
+            models.ExpenseItem.due_date.isnot(None),
+            extract("month", models.ExpenseItem.due_date) == month,
+        )
+    if property_id is not None:
+        query = query.filter(models.ExpenseItem.property_id == property_id)
+    if status is not None:
+        query = query.filter(models.ExpenseItem.status == status)
+    if category is not None:
+        query = query.filter(models.ExpenseItem.category == category)
 
-    if month is not None or year is not None:
-        if property_id is not None:
-            items = [i for i in items if i.property_id == property_id]
-        if status is not None:
-            items = [i for i in items if i.status == status]
-        if category is not None:
-            items = [i for i in items if i.category == category]
-
+    items = query.order_by(models.ExpenseItem.due_date.desc()).offset(offset).limit(limit).all()
     return [ExpenseItemResponse.model_validate(i) for i in items]
 
 
@@ -159,6 +153,7 @@ def mark_paid(
 
     expense.status = "paid"
     expense.paid_date = datetime.now(timezone.utc)
+    expense.amount_paid = expense.amount
     db.commit()
     db.refresh(expense)
     return ExpenseItemResponse.model_validate(expense)
@@ -231,6 +226,7 @@ def mark_unpaid(
 
     expense.status = "pending"
     expense.paid_date = None
+    expense.amount_paid = 0
     db.commit()
     db.refresh(expense)
     return ExpenseItemResponse.model_validate(expense)
@@ -318,6 +314,16 @@ def generate_upcoming_expenses(
                         generated_count += 1
                     current_day += step
             else:
+                # Skip ad_hoc templates — they are created manually only
+                if template.frequency == "ad_hoc":
+                    continue
+
+                # Quarterly templates only fire every 3 months, anchored to month_of_year
+                if template.frequency == "quarterly":
+                    anchor_month = template.month_of_year or 1
+                    if (target_month - anchor_month) % 3 != 0:
+                        continue
+
                 already_exists = any(
                     e.due_date and e.due_date.year == target_year and e.due_date.month == target_month
                     for e in existing

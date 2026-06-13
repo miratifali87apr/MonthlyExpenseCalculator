@@ -37,17 +37,17 @@ export const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  loan: 'bg-slate-100 text-slate-600',
-  insurance: 'bg-slate-100 text-slate-600',
-  utility: 'bg-slate-100 text-slate-600',
-  council_rates: 'bg-slate-100 text-slate-600',
-  bas: 'bg-slate-100 text-slate-600',
-  school_fees: 'bg-slate-100 text-slate-600',
-  credit_card: 'bg-slate-100 text-slate-600',
-  car: 'bg-slate-100 text-slate-600',
-  pm_fees: 'bg-slate-100 text-slate-600',
-  maintenance: 'bg-slate-100 text-slate-600',
-  letting_fee: 'bg-slate-100 text-slate-600',
+  loan: 'bg-blue-100 text-blue-700',
+  insurance: 'bg-purple-100 text-purple-700',
+  utility: 'bg-amber-100 text-amber-700',
+  council_rates: 'bg-teal-100 text-teal-700',
+  bas: 'bg-indigo-100 text-indigo-700',
+  school_fees: 'bg-pink-100 text-pink-700',
+  credit_card: 'bg-red-100 text-red-700',
+  car: 'bg-cyan-100 text-cyan-700',
+  pm_fees: 'bg-orange-100 text-orange-700',
+  maintenance: 'bg-yellow-100 text-yellow-700',
+  letting_fee: 'bg-emerald-100 text-emerald-700',
   other: 'bg-slate-100 text-slate-600',
 };
 

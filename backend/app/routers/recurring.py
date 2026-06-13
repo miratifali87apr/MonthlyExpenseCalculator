@@ -20,6 +20,8 @@ router = APIRouter()
 
 @router.get("", response_model=List[RecurringTemplateResponse])
 def list_recurring_templates(
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -30,6 +32,8 @@ def list_recurring_templates(
             models.RecurringTemplate.day_of_month.asc().nulls_last(),
             models.RecurringTemplate.name.asc(),
         )
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [RecurringTemplateResponse.model_validate(t) for t in templates]
@@ -70,6 +74,25 @@ def update_recurring_template(
     for field, value in update_data.items():
         setattr(template, field, value)
 
+    # Propagate changes to linked unpaid expenses (current month onward)
+    propagate_fields = {"name", "category", "amount", "notes", "property_id"} & update_data.keys()
+    if propagate_fields:
+        now = datetime.now(timezone.utc)
+        first_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+        linked = (
+            db.query(models.ExpenseItem)
+            .filter(
+                models.ExpenseItem.template_id == template.id,
+                models.ExpenseItem.user_id == current_user.id,
+                models.ExpenseItem.status.in_(["pending", "overdue"]),
+                models.ExpenseItem.due_date >= first_of_month,
+            )
+            .all()
+        )
+        for expense in linked:
+            for field in propagate_fields:
+                setattr(expense, field, getattr(template, field))
+
     db.commit()
     db.refresh(template)
     return RecurringTemplateResponse.model_validate(template)
@@ -107,7 +130,7 @@ def generate_from_templates(
 ):
     """
     Generate expense items from the current user's active recurring templates for a given month/year.
-    Defaults to next month if not specified.
+    Defaults to current month if not specified.
     Skips any template+month combination that already has an expense item.
     """
     now = datetime.now(timezone.utc)
@@ -175,7 +198,17 @@ def generate_from_templates(
                     generated_count += 1
                 current_day += step
         else:
-            # Single occurrence per month (monthly, quarterly, ad_hoc, yearly)
+            # Single occurrence per month (monthly, quarterly, yearly)
+            # Skip ad_hoc templates — they are created manually only
+            if template.frequency == "ad_hoc":
+                continue
+
+            # Quarterly templates only fire every 3 months, anchored to month_of_year
+            if template.frequency == "quarterly":
+                anchor_month = template.month_of_year or 1
+                if (target_month - anchor_month) % 3 != 0:
+                    continue
+
             already_exists = any(
                 e.due_date and e.due_date.year == target_year and e.due_date.month == target_month
                 for e in existing

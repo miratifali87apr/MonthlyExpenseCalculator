@@ -3,7 +3,7 @@ import json
 import secrets
 import time
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import JWTError, jwt
@@ -21,6 +21,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fxpwhhtwuwqyclrkhexg.supabase.co")
 _supabase_jwks: Optional[dict] = None
+_supabase_jwks_fetched_at: float = 0.0
+_JWKS_TTL = 3600  # re-fetch keys every hour
 
 # ── User cache ────────────────────────────────────────────────────────────────
 # Caches user_id keyed by email to skip a slow email lookup on every request
@@ -42,12 +44,20 @@ def _cache_set(user: models.User) -> None:
     _USER_CACHE[user.email] = (user.id, time.monotonic())
 
 
-def _get_supabase_jwks() -> dict:
+def _fetch_supabase_jwks() -> dict:
+    """Fetch JWKS from Supabase and update the cache."""
+    global _supabase_jwks, _supabase_jwks_fetched_at
+    url = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        _supabase_jwks = json.loads(resp.read())
+    _supabase_jwks_fetched_at = time.monotonic()
+    return _supabase_jwks
+
+
+def _get_supabase_jwks(force_refresh: bool = False) -> dict:
     global _supabase_jwks
-    if _supabase_jwks is None:
-        url = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
-        with urllib.request.urlopen(url, timeout=10) as resp:
-            _supabase_jwks = json.loads(resp.read())
+    if force_refresh or _supabase_jwks is None or (time.monotonic() - _supabase_jwks_fetched_at) > _JWKS_TTL:
+        return _fetch_supabase_jwks()
     return _supabase_jwks
 
 
@@ -57,8 +67,12 @@ def _verify_supabase_token(token: str) -> Optional[dict]:
         header = jwt.get_unverified_header(token)
         kid = header.get("kid")
         key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+        # kid not found — Supabase may have rotated keys; try one forced refresh
         if not key:
-            return None
+            jwks = _get_supabase_jwks(force_refresh=True)
+            key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+            if not key:
+                return None
         return jwt.decode(token, key, algorithms=["ES256"], audience="authenticated")
     except Exception:
         return None
@@ -74,7 +88,7 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
+    expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode.update({"exp": expire})

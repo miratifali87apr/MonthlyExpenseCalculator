@@ -364,8 +364,10 @@ export default function DashboardPage() {
           <p className="text-xs text-white/50 mb-4">Net Cashflow</p>
 
           <div className="flex items-end gap-4 mb-6">
-            <p className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-none">
-              {formatCurrency(Math.abs(data.net_cashflow))}
+            <p className={`text-5xl md:text-6xl font-bold tracking-tight leading-none ${
+              data.net_cashflow > 0 ? 'text-emerald-400' : data.net_cashflow < 0 ? 'text-rose-400' : 'text-white/80'
+            }`}>
+              {data.net_cashflow > 0 ? '+' : data.net_cashflow < 0 ? '-' : ''}{formatCurrency(Math.abs(data.net_cashflow))}
             </p>
             <div className="flex flex-col gap-1.5 mb-1">
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
@@ -494,7 +496,7 @@ export default function DashboardPage() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="month" tickFormatter={(v) => dayjs(v).format('MMM')} tick={{ fontSize: 9, fill: '#94a3b8' }} />
-                <YAxis tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} tick={{ fontSize: 9, fill: '#94a3b8' }} width={32} />
+                <YAxis tickFormatter={(v) => Math.abs(v) >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}`} tick={{ fontSize: 9, fill: '#94a3b8' }} width={32} />
                 <Tooltip
                   formatter={(v: number, n: string) => [formatCurrency(v), n === 'income' ? 'Income' : 'Bills']}
                   labelFormatter={(l) => formatMonth(l)}

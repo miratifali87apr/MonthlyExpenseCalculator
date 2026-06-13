@@ -149,3 +149,66 @@ No manual DNS or domain changes needed for code updates — `cashflowwise.com.au
 2. If Render doesn't pick it up, go to Render dashboard → Manual Deploy
 
 Copy `.env.example` to `.env` (backend) and `frontend/.env.local` (frontend) to get started.
+
+## Code Review — 2026-06-13
+
+### What was reviewed
+Full security, correctness, scaling, and hygiene review of the entire codebase (backend + frontend).
+
+### What was fixed this session (TA/SSD sign-off)
+
+**TIER 1 — Security & data leaks**
+1. **notify.py debug block removed** — Removed `_debug` response block that leaked user emails, DB counts, and user IDs from `send_bill_reminders`. Also removed `_DEBUG_MODE` flag and `emailed_users`/`email_errors` variables that only existed to feed it. Response now returns only `{"sent": N, "failed": N}`.
+   - TA: Eliminates PII leakage at the API boundary; no coupling introduced.
+   - SSD: Clean removal, no dead code left behind.
+2. **SECRET_KEY startup check** *(prior session, verified)* — `config.py` fails loudly if SECRET_KEY is unset or matches known defaults. `docker-compose.yml` uses `${SECRET_KEY:?}` syntax.
+3. **AI rate limiting** *(prior session, verified)* — Per-user rate limiter (`_check_ai_rate_limit`) on all AI endpoints: chat, extract-property, parse-statement, extract-bill, analyze-portfolio, purchase-predictor. Default 10 req/min, configurable via `AI_RATE_LIMIT` env var.
+4. **test.db in .gitignore** — Added `*.db` to `.gitignore`. File exists on disk but was never git-tracked.
+
+**TIER 2 — Correctness & resilience**
+5. **JWKS TTL + refresh-on-failure** *(prior session, verified)* — `_JWKS_TTL = 3600` with automatic re-fetch. Kid-not-found triggers forced refresh before failing.
+6. **datetime.utcnow() eliminated** — Replaced all instances with `datetime.now(timezone.utc)` across notify.py (2 instances) and all test files (test_recurring.py, test_dashboard.py, test_expenses.py, test_income.py).
+   - TA: Consistent timezone-aware datetimes prevent subtle comparison bugs at system boundaries.
+   - SSD: All call sites verified; no remaining utcnow() in codebase.
+7. **Prisma schema synced** *(prior session, verified)* — All fields match between SQLAlchemy models and Prisma schema (user_id, amount_paid, weekly_rent, pm_fee_pct, month_of_year, plan, purchase_price, loan_amount).
+   - TA NOTE: Dual-ORM (SQLAlchemy + Prisma on same DB) is fragile long-term. Consider consolidating to one ORM when the frontend moves to full API-driven data fetching. Not refactored now — would be a major architectural change.
+
+**TIER 3 — Scaling**
+8. **SQL-level filtering** *(prior session, verified)* — expenses.py uses `sqlalchemy.extract()` for month/year filtering at DB level.
+9. **Pagination** — All list endpoints now have `limit`/`offset` query params with SQL-level `OFFSET`/`LIMIT`:
+   - expenses: ✓ (prior session)
+   - properties: ✓ (prior session)
+   - recurring: ✓ (prior session)
+   - **income: Fixed this session** — Replaced Python-level slicing with SQL-level `extract()` filtering + `offset()`/`limit()`. Also handles the edge case of recurring items with no date.
+   - TA: Income was the last endpoint doing in-memory pagination; now all endpoints scale with data volume.
+   - SSD: SQL filter preserves the original semantic (match on expected_date OR received_date, include dateless recurring items).
+
+**TIER 4 — Code hygiene**
+10. **Duplicate User interface** *(prior session, verified)* — Only one `User` interface exists in `types/index.ts` with `plan` field.
+11. **Shared monthly_equivalent()** — `_to_monthly()` in `ai.py` replaced with import from `app.utils.monthly_equivalent`. Dashboard and properties already used the shared version.
+    - TA: Single source of truth for frequency conversion eliminates drift risk.
+    - SSD: `ad_hoc` returns `0.0` in shared version (correct for financial context), while the removed local version returned the raw amount.
+12. **Footer year** — `"© 2025"` in `page.tsx` replaced with `{new Date().getFullYear()}` for dynamic year.
+
+### CodeRabbit
+CodeRabbit CLI (`coderabbit`, `cr`) is not installed locally and no `.coderabbit.yaml` config exists. `gh` CLI is also not installed. CodeRabbit may be configured as a GitHub App — it will run automatically on PR creation. Manual review was performed in lieu of local CLI run.
+
+### What remains / deferred
+- **Regression tests for Tier 1/2 fixes**: Deferred. The repo has a test suite (`backend/tests/`) but no CI pipeline to run it. Tests for SECRET_KEY startup check, JWKS refresh, and debug block removal would be valuable but are deferred to a testing-focused session.
+- **Dual-ORM consolidation**: The SQLAlchemy + Prisma dual-ORM pattern is fragile (any schema change must be mirrored in two places). Long-term, consider moving the frontend to API-only data fetching and dropping Prisma, or vice versa.
+- **Alembic migrations**: Schema is managed by `create_all()` on startup. No Alembic migration history exists. This works for now but will become dangerous with schema changes on a live DB.
+- **Mobile app**: Planned (Expo React Native in `/mobile`), not started.
+- **Google OAuth**: Client ID registered but not fully configured in Supabase.
+
+### Known issues
+- No CI/CD test pipeline — tests exist but must be run manually
+- Dual-ORM fragility (SQLAlchemy + Prisma mirror same DB)
+- No Alembic migrations — `create_all()` on startup
+- `_ai_requests` rate limiter is in-memory; resets on server restart (acceptable for current scale)
+- `_USER_CACHE` in auth.py is also in-memory (acceptable for single-instance deployment)
+
+### Next steps for next session
+- Set up CI pipeline (GitHub Actions) to run `pytest` on PR
+- Add Alembic migration infrastructure
+- Write regression tests for security fixes (SECRET_KEY check, JWKS refresh)
+- Consider adding Redis-backed rate limiting if scaling beyond single instance

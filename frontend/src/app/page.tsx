@@ -358,7 +358,7 @@ function Footer() {
             <Link href="/login" className="hover:text-slate-400 transition-colors">Sign in</Link>
             <a href="mailto:hello@financetracker.com.au" className="hover:text-slate-400 transition-colors">Contact</a>
           </div>
-          <p className="text-slate-700 text-xs">© 2025 CashflowWise · Australia</p>
+          <p className="text-slate-700 text-xs">© {new Date().getFullYear()} CashflowWise · Australia</p>
         </div>
       </div>
     </footer>

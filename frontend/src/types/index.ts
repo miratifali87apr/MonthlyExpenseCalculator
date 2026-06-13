@@ -108,9 +108,3 @@ export interface PropertySummary {
   net_cashflow: number;
   expense_breakdown: Record<string, number>;
 }
-
-export interface User {
-  id: number;
-  email: string;
-  name: string;
-}

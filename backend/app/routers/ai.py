@@ -1,6 +1,8 @@
 import os
 import base64
 import json
+import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List
 
@@ -11,8 +13,32 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth import get_current_user
 from app.database import get_db
 from app import models
+from app.utils import monthly_equivalent
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Per-user rate limiter for AI endpoints (in-memory, resets on restart)
+# ---------------------------------------------------------------------------
+_AI_RATE_WINDOW = 60  # seconds
+_AI_RATE_LIMIT = int(os.environ.get("AI_RATE_LIMIT", "10"))  # requests per window
+_ai_requests: dict[int, list[float]] = defaultdict(list)
+
+
+def _check_ai_rate_limit(current_user: models.User = Depends(get_current_user)):
+    """Dependency that enforces per-user rate limiting on AI endpoints."""
+    now = time.monotonic()
+    uid = current_user.id
+    # Prune expired timestamps
+    _ai_requests[uid] = [t for t in _ai_requests[uid] if now - t < _AI_RATE_WINDOW]
+    if len(_ai_requests[uid]) >= _AI_RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded — max {_AI_RATE_LIMIT} AI requests per minute. Please wait.",
+        )
+    _ai_requests[uid].append(now)
+    return current_user
 
 
 # ---------------------------------------------------------------------------
@@ -62,16 +88,9 @@ def _build_financial_context(user: models.User, db: Session) -> str:
 
     # Monthly totals
     total_expenses = sum(float(e.amount) for e in this_month_expenses)
-    def _to_monthly(amount: float, freq: str) -> float:
-        f = (freq or "monthly").lower()
-        if f == "weekly": return amount * 52 / 12
-        if f == "fortnightly": return amount * 26 / 12
-        if f == "quarterly": return amount / 3
-        if f == "yearly": return amount / 12
-        return amount  # monthly / ad_hoc
 
     total_income = sum(
-        _to_monthly(float(i.amount), i.frequency or "monthly")
+        monthly_equivalent(float(i.amount), i.frequency or "monthly")
         for i in recurring_income
     )
     net = total_income - total_expenses
@@ -116,7 +135,7 @@ def _build_financial_context(user: models.User, db: Session) -> str:
 def ai_chat(
     body: ChatRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(_check_ai_rate_limit),
 ):
     """AI Copilot — answers questions about the user's personal finances."""
     context = _build_financial_context(current_user, db)
@@ -320,7 +339,7 @@ def _ocr_bytes(image_bytes: bytes) -> str:
 async def extract_property(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(_check_ai_rate_limit),
 ):
     """
     Upload a PM statement, rental agreement, or lease PDF/image.
@@ -365,7 +384,7 @@ async def extract_property(
 async def parse_statement(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(_check_ai_rate_limit),
 ):
     _require_pro(current_user)
     content_type = file.content_type or "image/jpeg"
@@ -399,7 +418,7 @@ async def parse_statement(
 async def extract_bill(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(_check_ai_rate_limit),
 ):
     """
     Upload any bill/invoice PDF or image.
@@ -798,7 +817,7 @@ async def extract_bill_text(
 async def analyze_portfolio(
     body: dict,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(_check_ai_rate_limit),
 ):
     _require_pro(current_user)
     prompt = (
@@ -816,7 +835,7 @@ async def analyze_portfolio(
 async def purchase_predictor(
     body: dict,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(_check_ai_rate_limit),
 ):
     _require_pro(current_user)
     prompt = (

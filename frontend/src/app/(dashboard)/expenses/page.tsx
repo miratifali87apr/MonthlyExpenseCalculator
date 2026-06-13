@@ -182,7 +182,7 @@ function ChartView({ items }: { items: ExpenseItem[] }) {
               <XAxis dataKey="status" tick={{ fontSize: 12, fill: '#64748b' }} />
               <YAxis
                 tick={{ fontSize: 11, fill: '#64748b' }}
-                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                tickFormatter={(v) => Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
               />
               <Tooltip formatter={formatTooltipValue} />
               <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
@@ -601,6 +601,8 @@ export default function ExpensesPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [xlsxLoading, setXlsxLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [propertyFilter, setPropertyFilter] = useState('all');
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -707,7 +709,7 @@ export default function ExpensesPage() {
     }
   }
 
-  const sorted: ExpenseItem[] = [...(data ?? [])].sort((a, b) => {
+  const allSorted: ExpenseItem[] = [...(data ?? [])].sort((a, b) => {
     let cmp = 0;
     if (sortKey === 'due_date') cmp = (a.due_date ?? '').localeCompare(b.due_date ?? '');
     else if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
@@ -715,6 +717,20 @@ export default function ExpensesPage() {
     else if (sortKey === 'status') cmp = a.status.localeCompare(b.status);
     return sortDir === 'asc' ? cmp : -cmp;
   });
+
+  const sorted: ExpenseItem[] = allSorted
+    .filter(item =>
+      search === '' || item.name.toLowerCase().includes(search.toLowerCase())
+    )
+    .filter(item => {
+      if (propertyFilter === 'all') return true;
+      if (propertyFilter === 'personal') return !item.property;
+      return item.property?.name === propertyFilter;
+    });
+
+  const propertyOptions = Array.from(
+    new Set(allSorted.map(item => item.property?.name ?? null))
+  ).filter(Boolean) as string[];
 
   const total = sorted.reduce((sum: number, e: ExpenseItem) => sum + e.amount, 0);
 
@@ -845,6 +861,26 @@ export default function ExpensesPage() {
               <option value="">All</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Property</label>
+            <select value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)} className={selectCls}>
+              <option value="all">All</option>
+              <option value="personal">Personal</option>
+              {propertyOptions.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-2 md:col-span-1 md:min-w-[180px]">
+            <label className="block text-xs font-medium text-slate-500 mb-1">Search</label>
+            <input
+              type="text"
+              placeholder="Search expenses..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={selectCls}
+            />
           </div>
         </div>
       </Card>

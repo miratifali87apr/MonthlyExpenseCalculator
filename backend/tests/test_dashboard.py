@@ -1,14 +1,14 @@
 """Tests for /api/dashboard/summary endpoint."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def _expense(name="Mortgage", amount=1500, days_offset=5):
-    due = (datetime.utcnow() + timedelta(days=days_offset)).isoformat()
+    due = (datetime.now(timezone.utc) + timedelta(days=days_offset)).isoformat()
     return {"name": name, "category": "loan", "amount": amount, "due_date": due, "status": "pending"}
 
 
 def _income(name="Salary", amount=5000, type_="salary"):
-    expected = (datetime.utcnow() + timedelta(days=1)).isoformat()
+    expected = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     return {"name": name, "type": type_, "amount": amount, "expected_date": expected}
 
 

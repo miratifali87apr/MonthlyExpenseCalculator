@@ -1,9 +1,9 @@
 """Tests for /api/expenses endpoints."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def _expense(name="Mortgage", amount=1500, days_offset=5, status="pending", property_id=None):
-    due = (datetime.utcnow() + timedelta(days=days_offset)).isoformat()
+    due = (datetime.now(timezone.utc) + timedelta(days=days_offset)).isoformat()
     payload = {"name": name, "category": "loan", "amount": amount, "due_date": due, "status": status}
     if property_id:
         payload["property_id"] = property_id

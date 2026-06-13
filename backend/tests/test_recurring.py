@@ -1,5 +1,5 @@
 """Tests for /api/recurring endpoints."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def _template(name="Mortgage", amount=1500, category="loan", frequency="monthly", day_of_month=1):
@@ -55,7 +55,7 @@ def test_deactivate_recurring_template(client, auth_headers):
 
 def test_generate_from_templates(client, auth_headers):
     client.post("/api/recurring", json=_template(), headers=auth_headers)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     res = client.post(
         f"/api/recurring/generate?month={now.month}&year={now.year}",
         headers=auth_headers,
@@ -66,7 +66,7 @@ def test_generate_from_templates(client, auth_headers):
 
 def test_generate_skips_duplicates(client, auth_headers):
     client.post("/api/recurring", json=_template(), headers=auth_headers)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     params = f"?month={now.month}&year={now.year}"
     client.post(f"/api/recurring/generate{params}", headers=auth_headers)
     # Second generate in same month should skip
@@ -78,7 +78,7 @@ def test_generate_skips_duplicates(client, auth_headers):
 def test_generate_skips_inactive_templates(client, auth_headers):
     create = client.post("/api/recurring", json=_template(), headers=auth_headers).json()
     client.delete(f"/api/recurring/{create['id']}", headers=auth_headers)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     res = client.post(
         f"/api/recurring/generate?month={now.month}&year={now.year}",
         headers=auth_headers,

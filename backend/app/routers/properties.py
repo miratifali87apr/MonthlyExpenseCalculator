@@ -1,34 +1,22 @@
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models
 from app.schemas import PropertyCreate, PropertyUpdate, PropertyResponse, PropertySummary
 from app.auth import get_current_user
+from app.utils import monthly_equivalent
 
 router = APIRouter()
 
 
-def _monthly_equivalent(amount: float, frequency: str) -> float:
-    freq = (frequency or "monthly").lower()
-    if freq == "weekly":
-        return float(amount) * 52 / 12
-    if freq == "fortnightly":
-        return float(amount) * 26 / 12
-    if freq == "quarterly":
-        return float(amount) / 3
-    if freq == "yearly":
-        return float(amount) / 12
-    if freq == "ad_hoc":
-        return 0.0
-    return float(amount)
-
-
 @router.get("", response_model=List[PropertyResponse])
 def list_properties(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -36,6 +24,8 @@ def list_properties(
         db.query(models.Property)
         .filter(models.Property.user_id == current_user.id)
         .order_by(models.Property.name.asc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [PropertyResponse.model_validate(p) for p in properties]
@@ -125,7 +115,7 @@ def get_property_summary(
     total_income = 0.0
     for item in income_items:
         if item.is_recurring:
-            total_income += _monthly_equivalent(float(item.amount), item.frequency or "monthly")
+            total_income += monthly_equivalent(float(item.amount), item.frequency or "monthly")
         else:
             rd = item.received_date
             if rd and rd.year == current_year and rd.month == current_month:
@@ -163,7 +153,7 @@ def get_property_summary(
         )
         for t in templates:
             cat = t.category or "other"
-            expense_breakdown[cat] = expense_breakdown.get(cat, 0.0) + float(t.amount)
+            expense_breakdown[cat] = expense_breakdown.get(cat, 0.0) + monthly_equivalent(float(t.amount), t.frequency or "monthly")
         total_expenses = sum(expense_breakdown.values())
 
     net_cashflow = total_income - total_expenses

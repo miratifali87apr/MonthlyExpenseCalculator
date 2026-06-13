@@ -104,10 +104,12 @@ def send_overdue_alerts(
     Finds all users with overdue bills and emails them.
     Secured by X-Notify-Secret header.
     """
-    if NOTIFY_SECRET and x_notify_secret != NOTIFY_SECRET:
+    if not NOTIFY_SECRET:
+        raise HTTPException(status_code=503, detail="NOTIFY_SECRET is not configured")
+    if x_notify_secret != NOTIFY_SECRET:
         raise HTTPException(status_code=401, detail="Invalid notify secret")
 
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
 
     # Get all overdue expenses (status=overdue OR due_date < today AND not paid)
     overdue = (
@@ -226,20 +228,12 @@ def send_bill_reminders(
     and sends each user one summary email via Resend.
     Secured by X-Cron-Secret header checked against CRON_SECRET env var.
     """
-    if CRON_SECRET and x_cron_secret != CRON_SECRET:
+    if not CRON_SECRET:
+        raise HTTPException(status_code=503, detail="CRON_SECRET is not configured")
+    if x_cron_secret != CRON_SECRET:
         raise HTTPException(status_code=401, detail="Invalid cron secret")
 
-    # Debug: check total pending expenses and first due_date value
-    total_pending = db.query(models.ExpenseItem).filter(
-        models.ExpenseItem.status.in_(["pending", "overdue"])
-    ).count()
-    sample = db.query(models.ExpenseItem).filter(
-        models.ExpenseItem.status.in_(["pending", "overdue"])
-    ).first()
-    sample_due = str(sample.due_date) if sample else None
-    sample_uid = sample.user_id if sample else None
-
-    now = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     window_end = now + timedelta(days=4)  # include full day of day+3
 
     # Bills due between today and today+3 days that are still pending/overdue
@@ -271,8 +265,7 @@ def send_bill_reminders(
         })
 
     sent = 0
-    emailed_users = []
-    email_errors = []
+    failed = 0
     for uid, data in user_bills.items():
         user = data["user"]
         bills = data["bills"]
@@ -282,20 +275,7 @@ def send_bill_reminders(
         ok, err = _send_email(user.email, subject, html)
         if ok:
             sent += 1
-            emailed_users.append(user.email)
         else:
-            email_errors.append({"to": user.email, "error": err})
+            failed += 1
 
-    return {
-        "sent": sent,
-        "users": emailed_users,
-        "_debug": {
-            "now_utc": str(now),
-            "window_end": str(window_end),
-            "total_pending_expenses": total_pending,
-            "sample_due_date": sample_due,
-            "sample_user_id": sample_uid,
-            "upcoming_found": len(upcoming),
-            "email_errors": email_errors,
-        }
-    }
+    return {"sent": sent, "failed": failed}

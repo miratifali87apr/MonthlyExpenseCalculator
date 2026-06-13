@@ -8,24 +8,9 @@ from app.database import get_db
 from app import models
 from app.schemas import DashboardSummary, CashflowTrend, ExpenseItemResponse, IncomeItemResponse
 from app.auth import get_current_user
+from app.utils import monthly_equivalent
 
 router = APIRouter()
-
-
-def _monthly_equivalent(amount: float, frequency: str) -> float:
-    """Convert any frequency amount to its monthly equivalent."""
-    freq = (frequency or "monthly").lower()
-    if freq == "weekly":
-        return float(amount) * 52 / 12
-    if freq == "fortnightly":
-        return float(amount) * 26 / 12
-    if freq == "quarterly":
-        return float(amount) / 3
-    if freq == "yearly":
-        return float(amount) / 12
-    if freq == "ad_hoc":
-        return 0.0
-    return float(amount)
 
 
 @router.get("/summary", response_model=DashboardSummary)
@@ -110,13 +95,16 @@ def get_dashboard_summary(
         )
         .all()
     )
-    template_expenses_total = sum(float(t.amount) for t in user_active_templates)
+    template_expenses_total = sum(
+        monthly_equivalent(float(t.amount), t.frequency or "monthly")
+        for t in user_active_templates
+    )
 
     # ------------------------------------------------------------------
     # Totals
     # ------------------------------------------------------------------
     recurring_income_monthly = sum(
-        _monthly_equivalent(float(item.amount), item.frequency or "monthly")
+        monthly_equivalent(float(item.amount), item.frequency or "monthly")
         for item in recurring_income_items
     )
 

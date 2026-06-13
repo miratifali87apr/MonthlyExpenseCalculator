@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -52,7 +52,7 @@ def tax_year_export(
 
     return {
         "financial_year": f"FY{fy} (1 Jul {fy-1} – 30 Jun {fy})",
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "expenses": [
             {
                 "id": e.id,

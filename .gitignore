@@ -24,6 +24,9 @@ frontend/out/
 # Prisma
 frontend/prisma/*.db
 
+# SQLite test databases
+*.db
+
 # OS
 .DS_Store
 *.swp

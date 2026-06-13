@@ -14,7 +14,7 @@ import {
   FREQUENCY_LABELS,
 } from '@/lib/utils';
 import { IncomeItem, Property, IncomeType, Frequency } from '@/types';
-import { Plus, X, Download } from 'lucide-react';
+import { Plus, X, Download, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 
 function exportIncomeToCSV(items: IncomeItem[]) {
@@ -257,8 +257,9 @@ export default function IncomePage() {
   const [actionId, setActionId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState<IncomeItem | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string>('');
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['income'],
     queryFn: () => incomeApi.list({}),
   });
@@ -291,7 +292,10 @@ export default function IncomePage() {
     } finally { setActionId(null); }
   };
 
-  const totalMonthly = data?.reduce((sum: number, item: IncomeItem) => sum + toMonthlyAmount(item), 0) ?? 0;
+  const filtered: IncomeItem[] = (data ?? []).filter((item: IncomeItem) =>
+    typeFilter === '' || item.type === typeFilter
+  );
+  const totalMonthly = filtered.reduce((sum: number, item: IncomeItem) => sum + toMonthlyAmount(item), 0);
 
   return (
     <div className="space-y-4">
@@ -329,18 +333,60 @@ export default function IncomePage() {
         </div>
       </div>
 
+      {/* Filter Bar */}
+      <Card>
+        <div className="flex flex-wrap gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              <option value="">All Types</option>
+              <option value="salary">Salary</option>
+              <option value="rental">Rental</option>
+              <option value="reimbursement">Reimbursement</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+      </Card>
+
       <Card>
         {isLoading ? (
           <TableSkeleton rows={5} cols={8} />
-        ) : error ? (
-          <p className="text-sm text-red-600">Failed to load income data.</p>
+        ) : (error && !data) ? (
+          <div className="flex flex-col items-center py-10 gap-3">
+            <p className="text-sm text-slate-600 font-medium">Couldn&apos;t load income data</p>
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              {isFetching ? 'Retrying…' : 'Try Again'}
+            </button>
+          </div>
         ) : !data || data.length === 0 ? (
-          <p className="text-sm text-slate-500">No income items yet — tap &quot;Add Income&quot; to get started.</p>
+          <div className="flex flex-col items-center py-12 gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center">
+              <Wallet size={28} className="text-emerald-600" />
+            </div>
+            <div className="text-center">
+              <p className="font-semibold text-slate-800 text-base">No income yet</p>
+              <p className="text-sm text-slate-500 mt-1">Track your salary, rental income, reimbursements and more.</p>
+            </div>
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus size={15} className="mr-1" /> Add Income
+            </Button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-slate-500 py-4 text-center">No income items match the selected filter.</p>
         ) : (
           <>
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-slate-100">
-              {data.map((item: IncomeItem) => (
+              {filtered.map((item: IncomeItem) => (
                 <div key={item.id} className="py-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0 flex-1">
@@ -386,7 +432,7 @@ export default function IncomePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {data.map((item: IncomeItem) => (
+                  {filtered.map((item: IncomeItem) => (
                     <tr key={item.id}>
                       <td className="py-3 pr-4 font-medium text-slate-900">{item.name}</td>
                       <td className="py-3 pr-4">

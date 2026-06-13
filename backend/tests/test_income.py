@@ -1,9 +1,9 @@
 """Tests for /api/income endpoints."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def _income(name="Salary", amount=5000, type_="salary", property_id=None):
-    expected = (datetime.utcnow() + timedelta(days=1)).isoformat()
+    expected = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     payload = {"name": name, "type": type_, "amount": amount, "expected_date": expected}
     if property_id:
         payload["property_id"] = property_id

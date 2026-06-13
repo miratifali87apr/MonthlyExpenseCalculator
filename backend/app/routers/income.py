@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import extract, or_, and_
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -18,6 +19,8 @@ def list_income(
     year: Optional[int] = Query(None, ge=2000),
     type: Optional[str] = Query(None),
     property_id: Optional[int] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -32,28 +35,34 @@ def list_income(
     if property_id is not None:
         query = query.filter(models.IncomeItem.property_id == property_id)
 
+    # SQL-level date filtering: match on expected_date or received_date,
+    # and always include recurring items with no date.
+    if year is not None or month is not None:
+        date_conditions = []
+        for col in (models.IncomeItem.expected_date, models.IncomeItem.received_date):
+            parts = [col.isnot(None)]
+            if year is not None:
+                parts.append(extract("year", col) == year)
+            if month is not None:
+                parts.append(extract("month", col) == month)
+            date_conditions.append(and_(*parts))
+        # Always include recurring items that have no date at all
+        no_date_recurring = and_(
+            models.IncomeItem.expected_date.is_(None),
+            models.IncomeItem.received_date.is_(None),
+            models.IncomeItem.is_recurring == True,
+        )
+        query = query.filter(or_(*date_conditions, no_date_recurring))
+
     items = (
         query.order_by(
             models.IncomeItem.expected_date.desc().nulls_last(),
             models.IncomeItem.created_at.desc(),
         )
+        .offset(offset)
+        .limit(limit)
         .all()
     )
-
-    if month is not None or year is not None:
-        filtered = []
-        for item in items:
-            ref_date = item.expected_date or item.received_date
-            if ref_date is None:
-                if item.is_recurring:
-                    filtered.append(item)
-                continue
-            if year is not None and ref_date.year != year:
-                continue
-            if month is not None and ref_date.month != month:
-                continue
-            filtered.append(item)
-        items = filtered
 
     return [IncomeItemResponse.model_validate(i) for i in items]
 

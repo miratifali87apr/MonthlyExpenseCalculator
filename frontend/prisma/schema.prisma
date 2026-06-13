@@ -12,20 +12,30 @@ model User {
   email     String   @unique
   password  String
   name      String
+  plan      String   @default("free")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  properties Property[]
+  expenses   ExpenseItem[]
+  income     IncomeItem[]
+  templates  RecurringTemplate[]
 
   @@map("users")
 }
 
 model Property {
   id                   Int      @id @default(autoincrement())
+  userId               Int?     @map("user_id")
   name                 String
   address              String?
   tenantLiableForWater Boolean  @default(false) @map("tenant_liable_for_water")
+  weeklyRent           Decimal? @default(0) @map("weekly_rent") @db.Decimal(10, 2)
+  pmFeePct             Decimal? @default(0) @map("pm_fee_pct") @db.Decimal(5, 4)
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
+  user      User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
   expenses  ExpenseItem[]
   income    IncomeItem[]
   templates RecurringTemplate[]
@@ -34,18 +44,21 @@ model Property {
 }
 
 model RecurringTemplate {
-  id         Int      @id @default(autoincrement())
-  name       String
-  category   String
-  amount     Decimal  @db.Decimal(10, 2)
-  frequency  String   @default("monthly")
-  dayOfMonth Int?     @map("day_of_month")
-  propertyId Int?     @map("property_id")
-  notes      String?
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id          Int      @id @default(autoincrement())
+  userId      Int?     @map("user_id")
+  name        String
+  category    String
+  amount      Decimal  @db.Decimal(10, 2)
+  frequency   String   @default("monthly")
+  dayOfMonth  Int?     @map("day_of_month")
+  monthOfYear Int?     @map("month_of_year")
+  propertyId  Int?     @map("property_id")
+  notes       String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
+  user     User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   property Property?     @relation(fields: [propertyId], references: [id])
   expenses ExpenseItem[]
 
@@ -54,9 +67,11 @@ model RecurringTemplate {
 
 model ExpenseItem {
   id          Int       @id @default(autoincrement())
+  userId      Int?      @map("user_id")
   name        String
   category    String
   amount      Decimal   @db.Decimal(10, 2)
+  amountPaid  Decimal?  @default(0) @map("amount_paid") @db.Decimal(10, 2)
   dueDate     DateTime  @map("due_date")
   paidDate    DateTime? @map("paid_date")
   status      String    @default("pending")
@@ -67,6 +82,7 @@ model ExpenseItem {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
+  user     User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
   property Property?          @relation(fields: [propertyId], references: [id])
   template RecurringTemplate? @relation(fields: [templateId], references: [id])
 
@@ -75,6 +91,7 @@ model ExpenseItem {
 
 model IncomeItem {
   id                  Int       @id @default(autoincrement())
+  userId              Int?      @map("user_id")
   name                String
   type                String
   amount              Decimal   @db.Decimal(10, 2)
@@ -88,6 +105,7 @@ model IncomeItem {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   property Property? @relation(fields: [propertyId], references: [id])
 
   @@map("income_items")

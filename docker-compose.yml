@@ -27,7 +27,7 @@ services:
     container_name: finance_backend
     environment:
       - DATABASE_URL=postgresql://finance_user:finance_pass@postgres:5432/finance_tracker
-      - SECRET_KEY=super-secret-key-change-in-production-must-be-32-chars-min
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in your .env file}
       - FRONTEND_URL=http://localhost:3000
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

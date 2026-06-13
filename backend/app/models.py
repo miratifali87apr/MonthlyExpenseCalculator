@@ -45,7 +45,7 @@ class RecurringTemplate(Base):
     frequency = Column(String, nullable=False, default="monthly")
     day_of_month = Column(Integer, nullable=True)
     month_of_year = Column(Integer, nullable=True)  # 1-12, only used when frequency='yearly'
-    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
+    property_id = Column(Integer, ForeignKey("properties.id", ondelete="SET NULL"), nullable=True)
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -68,7 +68,7 @@ class ExpenseItem(Base):
     paid_date = Column(DateTime(timezone=True), nullable=True)
     status = Column(String, default="pending")  # pending, partial, paid, overdue, funded
     notes = Column(Text, nullable=True)
-    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
+    property_id = Column(Integer, ForeignKey("properties.id", ondelete="SET NULL"), nullable=True)
     template_id = Column(Integer, ForeignKey("recurring_templates.id"), nullable=True)
     is_recurring = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -88,7 +88,7 @@ class IncomeItem(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     received_date = Column(DateTime(timezone=True), nullable=True)
     expected_date = Column(DateTime(timezone=True), nullable=True)
-    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
+    property_id = Column(Integer, ForeignKey("properties.id", ondelete="SET NULL"), nullable=True)
     reimbursement_status = Column(String, nullable=True)  # pending, received
     notes = Column(Text, nullable=True)
     is_recurring = Column(Boolean, default=False)
