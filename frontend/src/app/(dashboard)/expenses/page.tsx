@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -20,6 +21,7 @@ import dayjs from 'dayjs';
 import {
   ChevronUp, ChevronDown, ChevronsUpDown, Plus, X, Download,
   Trash2, CheckSquare, Pencil, BarChart2, Table2, FileSpreadsheet,
+  MoreHorizontal, RotateCcw, Bookmark,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { propertiesApi } from '@/lib/api';
@@ -584,6 +586,113 @@ function PartialPayModal({ expense, onClose, onSaved }: { expense: ExpenseItem; 
   );
 }
 
+// ─── Action dropdown menu ─────────────────────────────────────────────────────
+function ActionMenu({
+  item,
+  loading,
+  onMarkPaid,
+  onUnpay,
+  onPartialPay,
+  onFund,
+  onEdit,
+  onDelete,
+}: {
+  item: ExpenseItem;
+  loading: boolean;
+  onMarkPaid: () => void;
+  onUnpay: () => void;
+  onPartialPay: () => void;
+  onFund: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  function toggle() {
+    if (!open && triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    }
+    setOpen(o => !o);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function close(e: MouseEvent) {
+      const t = e.target as Node;
+      if (!dropRef.current?.contains(t) && !triggerRef.current?.contains(t)) setOpen(false);
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  function run(fn: () => void) { setOpen(false); fn(); }
+
+  const mi = 'w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors';
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        onClick={toggle}
+        disabled={loading}
+        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors"
+        title="Actions"
+      >
+        {loading
+          ? <span className="animate-spin block h-4 w-4 border-2 border-slate-400 border-t-transparent rounded-full" />
+          : <MoreHorizontal size={16} />
+        }
+      </button>
+      {open && createPortal(
+        <div
+          ref={dropRef}
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
+          className="bg-white rounded-xl border border-slate-200 shadow-xl min-w-[180px] py-1 overflow-hidden"
+        >
+          {item.status === 'paid' ? (
+            <button className={`${mi} text-slate-600 hover:bg-slate-50`} onClick={() => run(onUnpay)}>
+              <RotateCcw size={13} className="text-slate-400" /> Undo Paid
+            </button>
+          ) : item.status === 'funded' ? (
+            <>
+              <button className={`${mi} text-emerald-700 hover:bg-emerald-50`} onClick={() => run(onMarkPaid)}>
+                <CheckSquare size={13} className="text-emerald-500" /> Mark Paid
+              </button>
+              <button className={`${mi} text-slate-600 hover:bg-slate-50`} onClick={() => run(onUnpay)}>
+                <RotateCcw size={13} className="text-slate-400" /> Undo Reserve
+              </button>
+            </>
+          ) : (
+            <>
+              <button className={`${mi} text-emerald-700 hover:bg-emerald-50`} onClick={() => run(onMarkPaid)}>
+                <CheckSquare size={13} className="text-emerald-500" /> Mark Paid
+              </button>
+              <button className={`${mi} text-slate-600 hover:bg-slate-50`} onClick={() => run(onPartialPay)}>
+                Part Pay
+              </button>
+              <button className={`${mi} text-blue-700 hover:bg-blue-50`} onClick={() => run(onFund)}>
+                <Bookmark size={13} className="text-blue-400" /> Reserve
+              </button>
+            </>
+          )}
+          <div className="border-t border-slate-100 my-1" />
+          <button className={`${mi} text-slate-700 hover:bg-slate-50`} onClick={() => run(onEdit)}>
+            <Pencil size={13} className="text-slate-400" /> Edit
+          </button>
+          <button className={`${mi} text-red-600 hover:bg-red-50`} onClick={() => run(onDelete)}>
+            <Trash2 size={13} className="text-red-400" /> Delete
+          </button>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function ExpensesPage() {
   const now = dayjs();
@@ -659,6 +768,32 @@ export default function ExpensesPage() {
       invalidate();
     } catch {
       toast.error('Failed to delete expense');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleUnpay = async (id: number) => {
+    setActionId(id);
+    try {
+      await expensesApi.unpay(id);
+      toast.success('Payment undone');
+      invalidate();
+    } catch {
+      toast.error('Failed to undo');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleFund = async (id: number) => {
+    setActionId(id);
+    try {
+      await expensesApi.fund(id);
+      toast.success('Marked as reserved');
+      invalidate();
+    } catch {
+      toast.error('Failed to reserve');
     } finally {
       setActionId(null);
     }
@@ -967,32 +1102,17 @@ export default function ExpensesPage() {
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[item.category] ?? 'bg-gray-100 text-gray-800'}`}>
                       {CATEGORY_LABELS[item.category] ?? item.category}
                     </span>
-                    <div className="flex gap-1.5 ml-auto">
-                      {item.status === 'paid' ? (
-                        <Button variant="ghost" size="sm" loading={actionId === item.id}
-                          onClick={async () => { setActionId(item.id); try { await expensesApi.unpay(item.id); await invalidate(); } finally { setActionId(null); } }}>
-                          Undo
-                        </Button>
-                      ) : item.status === 'funded' ? (
-                        <>
-                          <Button variant="success" size="sm" loading={actionId === item.id} onClick={() => handleMarkPaid(item.id)}>Paid</Button>
-                          <Button variant="ghost" size="sm" loading={actionId === item.id}
-                            onClick={async () => { setActionId(item.id); try { await expensesApi.unpay(item.id); await invalidate(); } finally { setActionId(null); } }}>
-                            Undo
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button variant="success" size="sm" loading={actionId === item.id} onClick={() => handleMarkPaid(item.id)}>Paid</Button>
-                          <Button variant="ghost" size="sm" onClick={() => setPartialPayExpense(item)}>Part Pay</Button>
-                          <Button variant="info" size="sm" loading={actionId === item.id}
-                            onClick={async () => { setActionId(item.id); try { await expensesApi.fund(item.id); await invalidate(); } finally { setActionId(null); } }}>
-                            Fund
-                          </Button>
-                        </>
-                      )}
-                      <Button variant="ghost" size="sm" onClick={() => setEditExpense(item)}><Pencil size={13} /></Button>
-                      <Button variant="danger" size="sm" loading={actionId === item.id} onClick={() => handleDelete(item.id)}>Del</Button>
+                    <div className="ml-auto">
+                      <ActionMenu
+                        item={item}
+                        loading={actionId === item.id}
+                        onMarkPaid={() => handleMarkPaid(item.id)}
+                        onUnpay={() => handleUnpay(item.id)}
+                        onPartialPay={() => setPartialPayExpense(item)}
+                        onFund={() => handleFund(item.id)}
+                        onEdit={() => setEditExpense(item)}
+                        onDelete={() => handleDelete(item.id)}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1107,45 +1227,16 @@ export default function ExpensesPage() {
                         </Badge>
                       </td>
                       <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          {item.status === 'paid' ? (
-                            <Button variant="ghost" size="sm" loading={actionId === item.id}
-                              onClick={async () => { setActionId(item.id); try { await expensesApi.unpay(item.id); await invalidate(); } finally { setActionId(null); } }}>
-                              Undo Paid
-                            </Button>
-                          ) : item.status === 'funded' ? (
-                            <>
-                              <Button variant="success" size="sm" loading={actionId === item.id}
-                                onClick={() => handleMarkPaid(item.id)}>
-                                Mark Paid
-                              </Button>
-                              <Button variant="ghost" size="sm" loading={actionId === item.id}
-                                onClick={async () => { setActionId(item.id); try { await expensesApi.unpay(item.id); await invalidate(); } finally { setActionId(null); } }}>
-                                Undo
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button variant="success" size="sm" loading={actionId === item.id}
-                                onClick={() => handleMarkPaid(item.id)}>
-                                Mark Paid
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => setPartialPayExpense(item)}>
-                                Part Pay
-                              </Button>
-                              <Button variant="info" size="sm" loading={actionId === item.id}
-                                onClick={async () => { setActionId(item.id); try { await expensesApi.fund(item.id); await invalidate(); } finally { setActionId(null); } }}>
-                                Reserve
-                              </Button>
-                            </>
-                          )}
-                          <Button variant="ghost" size="sm" onClick={() => setEditExpense(item)}>
-                            <Pencil size={13} className="mr-1" /> Edit
-                          </Button>
-                          <Button variant="danger" size="sm" loading={actionId === item.id} onClick={() => handleDelete(item.id)}>
-                            Delete
-                          </Button>
-                        </div>
+                        <ActionMenu
+                          item={item}
+                          loading={actionId === item.id}
+                          onMarkPaid={() => handleMarkPaid(item.id)}
+                          onUnpay={() => handleUnpay(item.id)}
+                          onPartialPay={() => setPartialPayExpense(item)}
+                          onFund={() => handleFund(item.id)}
+                          onEdit={() => setEditExpense(item)}
+                          onDelete={() => handleDelete(item.id)}
+                        />
                       </td>
                     </tr>
                   ))}
