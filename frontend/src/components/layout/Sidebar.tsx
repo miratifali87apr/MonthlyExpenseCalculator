@@ -7,7 +7,7 @@ import {
   CreditCard,
   TrendingUp,
   Home,
-  RefreshCw,
+  Repeat,
   DollarSign,
   LogOut,
   User,
@@ -29,7 +29,7 @@ const navItems: NavItem[] = [
   { href: '/expenses', label: 'Bills & Payments', icon: CreditCard },
   { href: '/income', label: 'Income', icon: TrendingUp },
   { href: '/properties', label: 'My Properties', icon: Home },
-  { href: '/recurring', label: 'Auto Bills', icon: RefreshCw },
+  { href: '/recurring', label: 'Recurring Bills', icon: Repeat },
   { href: '/insights', label: 'Insights', icon: Sparkles },
 ];
 

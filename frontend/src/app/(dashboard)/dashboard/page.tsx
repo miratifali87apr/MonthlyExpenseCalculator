@@ -14,7 +14,7 @@ import type { ExpenseItem, IncomeItem } from '@/types';
 import Link from 'next/link';
 import {
   TrendingUp, TrendingDown, FileDown, ArrowRight,
-  CheckCircle2, Clock, AlertCircle, Home, RefreshCw, Sparkles,
+  CheckCircle2, Clock, AlertCircle, Home, Repeat, Sparkles,
   ChevronRight, DollarSign,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -66,16 +66,17 @@ async function downloadTaxExport(setLoading: (v: boolean) => void) {
 
 // ─── Stat pill ────────────────────────────────────────────────────────────────
 function StatPill({
-  icon, label, value, sub, color,
+  icon, label, value, sub, color, href,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
   color: string;
+  href?: string;
 }) {
-  return (
-    <div className="flex-1 min-w-0 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-4">
+  const inner = (
+    <div className={`bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-4 h-full ${href ? 'hover:shadow-md hover:border-slate-200 transition-all' : ''}`}>
       <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg mb-3 ${color}`}>
         {icon}
       </div>
@@ -84,6 +85,10 @@ function StatPill({
       {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
     </div>
   );
+  if (href) {
+    return <Link href={href} className="flex-1 min-w-0 block">{inner}</Link>;
+  }
+  return <div className="flex-1 min-w-0">{inner}</div>;
 }
 
 // ─── Bill row ─────────────────────────────────────────────────────────────────
@@ -136,7 +141,7 @@ function BillRow({
         ) : (
           <div className="flex gap-1.5">
             <Button variant="info" size="sm" loading={fundingId === item.id} onClick={() => onFund(item.id)}>
-              Reserve
+              Set Aside
             </Button>
             <Button variant="success" size="sm" loading={payingId === item.id} onClick={() => onPay(item.id)}>
               Paid
@@ -161,7 +166,7 @@ function EmptyDashboard() {
       cardCls: 'border-slate-300 ring-2 ring-slate-800/10',
     },
     {
-      icon: <RefreshCw className="w-5 h-5 text-indigo-600" />,
+      icon: <Repeat className="w-5 h-5 text-indigo-600" />,
       badge: 'Step 2', badgeCls: 'bg-indigo-50 text-indigo-700',
       title: 'Set up recurring bills',
       desc: 'Add your mortgage, insurance, council rates once — we auto-generate them every month.',
@@ -422,6 +427,7 @@ export default function DashboardPage() {
           value={String(paidCount)}
           sub="bills cleared"
           color="bg-emerald-50"
+          href="/expenses?status=paid"
         />
         <StatPill
           icon={<Clock size={16} className="text-indigo-600" />}
@@ -429,6 +435,7 @@ export default function DashboardPage() {
           value={String(pendingCount)}
           sub={pendingCount > 0 ? `${formatCurrency(data.next_unfunded.reduce((s, i) => s + i.amount, 0))} to action` : 'all clear'}
           color="bg-indigo-50"
+          href="/expenses?status=pending"
         />
         <StatPill
           icon={<AlertCircle size={16} className={overdueCount > 0 ? 'text-rose-600' : 'text-slate-400'} />}
@@ -436,6 +443,7 @@ export default function DashboardPage() {
           value={String(overdueCount)}
           sub={overdueCount > 0 ? 'needs attention' : 'nothing overdue'}
           color={overdueCount > 0 ? 'bg-rose-50' : 'bg-slate-50'}
+          href="/expenses?status=overdue"
         />
       </div>
 

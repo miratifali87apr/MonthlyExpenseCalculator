@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -663,7 +664,7 @@ function ActionMenu({
                 <CheckSquare size={13} className="text-emerald-500" /> Mark Paid
               </button>
               <button className={`${mi} text-slate-600 hover:bg-slate-50`} onClick={() => run(onUnpay)}>
-                <RotateCcw size={13} className="text-slate-400" /> Undo Reserve
+                <RotateCcw size={13} className="text-slate-400" /> Undo Set Aside
               </button>
             </>
           ) : (
@@ -675,7 +676,7 @@ function ActionMenu({
                 Part Pay
               </button>
               <button className={`${mi} text-blue-700 hover:bg-blue-50`} onClick={() => run(onFund)}>
-                <Bookmark size={13} className="text-blue-400" /> Reserve
+                <Bookmark size={13} className="text-blue-400" /> Set Aside
               </button>
             </>
           )}
@@ -696,9 +697,10 @@ function ActionMenu({
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function ExpensesPage() {
   const now = dayjs();
+  const searchParams = useSearchParams();
   const [month, setMonth] = useState<number>(now.month() + 1);
   const [year, setYear] = useState<number>(now.year());
-  const [status, setStatus] = useState<string>('');
+  const [status, setStatus] = useState<string>(searchParams.get('status') ?? '');
   const [category, setCategory] = useState<string>('');
   const [actionId, setActionId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CreditCard, TrendingUp, Home, RefreshCw, Sparkles } from 'lucide-react';
+import { LayoutDashboard, CreditCard, TrendingUp, Home, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -10,7 +10,6 @@ const navItems = [
   { href: '/expenses',   label: 'Bills',      icon: CreditCard },
   { href: '/income',     label: 'Income',     icon: TrendingUp },
   { href: '/properties', label: 'Properties', icon: Home },
-  { href: '/recurring',  label: 'Auto Bills', icon: RefreshCw },
   { href: '/insights',   label: 'Insights',   icon: Sparkles },
 ];
 
